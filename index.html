@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f3d40">
+<title>Brinco · Bunny Express</title>
+<style>
+  /* Herramienta de mostrador: una columna, botones grandes, color = destino */
+  :root {
+    --tinta: #0f3d40; --tinta-suave: #4a6b6d; --fondo: #f9f3e5; --papel: #fffdf6;
+    --linea: #e2d9c2; --acento: #0b7786; --acento-osc: #12646f; --oro: #e9b23c;
+    --bien: #1a7f4b; --mal: #b3261e; --aviso: #9a6700; --aviso-fondo: #fff4d6;
+    --radio: 12px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--fondo); color: var(--tinta); }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  [hidden] { display: none !important; }
+
+  #app { max-width: 640px; margin: 0 auto; min-height: 100%; display: flex; flex-direction: column; }
+  header.barra { position: sticky; top: 0; z-index: 5; background: var(--tinta); color: #fff; padding: 10px 16px; display: flex; align-items: center; gap: 10px; }
+  header.barra .marca { font-weight: 800; letter-spacing: .02em; font-size: 18px; color: var(--oro); }
+  header.barra .lugar { margin-left: auto; background: rgba(255,255,255,.14); border: 0; color: #fff; padding: 6px 12px; border-radius: 999px; font-size: 14px; max-width: 60%; }
+  main { flex: 1; padding: 16px 16px 96px; display: flex; flex-direction: column; gap: 14px; }
+  nav.pestanas { position: fixed; bottom: 0; left: 0; right: 0; z-index: 5; background: var(--papel); border-top: 1px solid var(--linea); display: flex; justify-content: center; padding-bottom: env(safe-area-inset-bottom, 0px); }
+  nav.pestanas .dentro { display: flex; width: 100%; max-width: 640px; }
+  nav.pestanas button { flex: 1; background: none; border: 0; padding: 12px 4px 10px; font-size: 13px; font-weight: 600; color: var(--tinta-suave); border-top: 3px solid transparent; }
+  nav.pestanas button.activa { color: var(--acento-osc); border-top-color: var(--oro); }
+
+  h1 { font-size: 22px; margin: 0; text-wrap: balance; }
+  h2 { font-size: 17px; margin: 0; }
+  p { margin: 0; }
+  .suave { color: var(--tinta-suave); font-size: 14px; }
+  .fila { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .fila > .crece { flex: 1; min-width: 0; }
+  .pila { display: flex; flex-direction: column; gap: 10px; }
+  .tarjeta { background: var(--papel); border: 1px solid var(--linea); border-radius: var(--radio); padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+  .tarjeta.toca { cursor: pointer; }
+  .tarjeta.toca:active { background: #f3ecd9; }
+
+  label.campo { display: flex; flex-direction: column; gap: 4px; font-size: 14px; font-weight: 600; }
+  input[type=text], input[type=email], input[type=password], input[type=tel], input[type=number], input[type=date], select, textarea {
+    width: 100%; padding: 12px; border: 1.5px solid var(--linea); border-radius: 10px; background: #fff; font-weight: 400; min-height: 48px; }
+  input:focus, select:focus, textarea:focus, button:focus-visible { outline: 3px solid rgba(233,178,60,.6); outline-offset: 1px; border-color: var(--oro); }
+  input.codigo { font-size: 26px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; text-align: center; }
+  .marca-check { display: flex; align-items: center; gap: 10px; font-weight: 500; font-size: 15px; min-height: 40px; }
+  .marca-check input { width: 22px; height: 22px; accent-color: var(--acento); flex: none; }
+
+  .btn { border: 0; border-radius: 10px; padding: 14px 16px; font-weight: 700; min-height: 50px; background: var(--acento); color: #fff; cursor: pointer; text-align: center; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+  .btn:active { background: var(--acento-osc); }
+  .btn[disabled] { opacity: .5; }
+  .btn.ancho { width: 100%; }
+  .btn.sec { background: var(--papel); color: var(--tinta); border: 1.5px solid var(--linea); }
+  .btn.oscuro { background: var(--tinta); }
+  .btn.verde { background: var(--bien); }
+  .btn.rojo { background: #fff; color: var(--mal); border: 1.5px solid var(--mal); }
+  .btn.chico { min-height: 38px; padding: 8px 12px; font-size: 14px; }
+
+  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: 13px; font-weight: 700; background: #efe8d4; white-space: nowrap; }
+  .chip .punto { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+  .chip.estado-pendiente { background: #e3f1ea; color: var(--bien); }
+  .chip.estado-en_camino { background: var(--aviso-fondo); color: var(--aviso); }
+  .chip.estado-entregado { background: #e7eeec; color: var(--tinta-suave); }
+  .chip.estado-devuelto, .chip.estado-anulado { background: #f9e3e1; color: var(--mal); }
+  .cod { font-weight: 800; font-size: 19px; letter-spacing: .04em; font-variant-numeric: tabular-nums; }
+  .destino-grande { border-radius: 10px; padding: 12px; color: #fff; font-weight: 800; font-size: 18px; text-align: center; }
+  .aviso-caja { background: var(--aviso-fondo); color: #5c3d00; border-radius: 10px; padding: 12px; font-size: 14px; }
+  .error-caja { background: #f9e3e1; color: var(--mal); border-radius: 10px; padding: 12px; font-size: 14px; font-weight: 600; }
+  .ok-caja { background: #e3f1ea; color: var(--bien); border-radius: 10px; padding: 12px; font-weight: 700; }
+  .lista-simple { display: flex; flex-direction: column; }
+  .lista-simple > * { padding: 10px 0; border-bottom: 1px solid var(--linea); }
+  .lista-simple > *:last-child { border-bottom: 0; }
+  .fotos { display: flex; gap: 8px; overflow-x: auto; }
+  .fotos img { height: 150px; border-radius: 8px; border: 1px solid var(--linea); }
+  .vista-previa { max-height: 120px; border-radius: 8px; align-self: flex-start; }
+  canvas.firma { width: 100%; height: 180px; background: #fff; border: 2px dashed var(--linea); border-radius: 10px; touch-action: none; }
+  pre.mensaje { white-space: pre-wrap; word-break: break-word; background: #f3ecd9; border-radius: 10px; padding: 12px; margin: 0; font: 14px/1.45 system-ui, sans-serif; }
+  .numero-grande { font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .rejilla2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .dias { display: flex; gap: 6px; flex-wrap: wrap; }
+  .dias label { display: flex; flex-direction: column; align-items: center; font-size: 12px; font-weight: 600; gap: 2px; }
+  .dias input { width: 22px; height: 22px; accent-color: var(--acento); }
+
+  #toast { position: fixed; left: 50%; bottom: 84px; transform: translateX(-50%); background: var(--tinta); color: #fff; padding: 12px 16px; border-radius: 10px; max-width: min(92vw, 560px); z-index: 30; font-weight: 600; box-shadow: 0 6px 20px rgba(0,0,0,.25); }
+  #toast.mal { background: var(--mal); }
+  #toast.bien { background: var(--bien); }
+  .velo { position: fixed; inset: 0; background: rgba(15,61,64,.6); z-index: 20; display: flex; align-items: flex-end; justify-content: center; }
+  .hoja { background: var(--papel); width: 100%; max-width: 640px; max-height: 92vh; overflow-y: auto; border-radius: 16px 16px 0 0; padding: 18px 16px calc(18px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 12px; }
+  .centro { min-height: 100vh; display: flex; flex-direction: column; justify-content: center; padding: 24px; gap: 14px; max-width: 420px; margin: 0 auto; }
+  .logo { font-size: 40px; font-weight: 900; letter-spacing: -.02em; color: var(--tinta); }
+  .logo span { color: var(--acento); }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="toast" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script>
+"use strict";
+/* =====================================================================
+   BRINCO · por Bunny Express — App del mostrador · Etapa 1
+   Un solo archivo. Se conecta a la base de datos BRINCO en Supabase.
+   ===================================================================== */
+const CONFIG = {
+  url: "https://dhlwluyskvzikqblvzsj.supabase.co",
+  llave: "sb_publishable_sXZQXvFOX9xRicQAX4tDKA_DgebFx02",   // llave pública (no es secreta)
+  prefijoPais: "591"
+};
+
+const PERMISOS = [
+  ["anular", "Anular paquetes"],
+  ["entregar_sin_codigo", "Entregar sin código de retiro"],
+  ["configurar", "Configurar puntos, letras, feriados y ajustes"],
+  ["ver_historial", "Ver el historial"],
+  ["limpiar_fotos", "Limpiar fotos antiguas"],
+  ["cambiar_precio", "Cambiar precios (etapa 2)"]
+];
+const DIAS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+const ESTADOS = { pendiente: "Pendiente", en_camino: "En camino", entregado: "Entregado", devuelto: "Devuelto", anulado: "Anulado" };
+
+const sb = window.supabase.createClient(CONFIG.url, CONFIG.llave);
+const E = { sesion: null, perfil: null, lugares: [], series: [], ajustes: {}, lugarId: null, pestana: "recibir", lote: null };
+
+/* ---------- utilidades ---------- */
+function h(tag, attrs, ...hijos) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v === null || v === undefined || v === false) continue;
+    if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else if (k === "class") el.className = v;
+    else if (k === "style") el.style.cssText = v;
+    else if (k in el && k !== "list" && k !== "form") el[k] = v;
+    else el.setAttribute(k, v === true ? "" : v);
+  }
+  for (const c of hijos.flat(Infinity)) {
+    if (c === null || c === undefined || c === false) continue;
+    el.append(c instanceof Node ? c : document.createTextNode(String(c)));
+  }
+  return el;
+}
+function pon(el, ...nodos) { el.replaceChildren(...nodos.flat(Infinity).filter(n => n !== null && n !== undefined && n !== false)); }
+const $app = document.getElementById("app");
+let toastT = null;
+function toast(msg, tipo) {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.className = tipo || ""; t.hidden = false;
+  clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, tipo === "mal" ? 6000 : 3000);
+}
+function traducir(m) {
+  m = String(m || "");
+  if (/paquetes_codigo_activo/.test(m)) return "Ya hay un paquete activo con ese código.";
+  if (/row-level security|permission denied/i.test(m)) return "No tienes permiso para hacer esto.";
+  if (/Failed to fetch|NetworkError|Load failed/i.test(m)) return "Sin conexión a internet. Intenta de nuevo.";
+  if (/Invalid login credentials/i.test(m)) return "Correo o contraseña incorrectos.";
+  if (/paquetes_codigo_check/.test(m)) return "El código debe ser letras y luego números, por ejemplo Q0251.";
+  if (/telefono_check|cliente_tel_check/.test(m)) return "El celular debe tener solo números (6 a 15 dígitos).";
+  if (/lugares_nombre_key/.test(m)) return "Ya existe un lugar con ese nombre.";
+  if (/series_pkey/.test(m)) return "Esa letra ya está asignada a un lugar.";
+  if (/feriados_pkey/.test(m)) return "Ese feriado ya está en la lista.";
+  return m;
+}
+function ok(res) { if (res.error) throw new Error(traducir(res.error.message)); return res.data; }
+async function intentar(fn, boton) {
+  if (boton) boton.disabled = true;
+  try { return await fn(); }
+  catch (e) { console.error(e); toast(traducir(e.message), "mal"); return undefined; }
+  finally { if (boton) boton.disabled = false; }
+}
+const fmtFecha = new Intl.DateTimeFormat("es-BO", { timeZone: "America/La_Paz", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+function fecha(s) { return s ? fmtFecha.format(new Date(s)) : ""; }
+function diasDesde(s) { return Math.floor((Date.now() - new Date(s).getTime()) / 86400000); }
+function lugar(id) { return E.lugares.find(l => l.id === id) || { nombre: "?", color: "#888" }; }
+function puede(p) { return !!E.perfil && (E.perfil.rol === "admin" || (E.perfil.permisos || []).includes(p)); }
+function ajusteNum(clave, defecto) { const n = Number(E.ajustes[clave]); return E.ajustes[clave] !== undefined && Number.isFinite(n) ? n : defecto; }
+function limpiarCodigo(s) { return String(s || "").toUpperCase().replace(/[\s-]/g, ""); }
+function soloDigitos(s) { return String(s || "").replace(/\D/g, ""); }
+function chipLugar(id, texto) { const l = lugar(id); return h("span", { class: "chip" }, h("span", { class: "punto", style: "background:" + l.color }), texto || l.nombre); }
+function chipEstado(e) { return h("span", { class: "chip estado-" + e }, ESTADOS[e] || e); }
+function siguienteCodigo(c) {
+  const m = /^([A-Z]+)(\d+)$/.exec(c || ""); if (!m) return "";
+  return m[1] + String(Number(m[2]) + 1).padStart(m[2].length, "0");
+}
+function destinoDeCodigo(c) {
+  const m = /^([A-Z]+)/.exec(limpiarCodigo(c)); if (!m) return null;
+  const s = E.series.find(x => x.letra === m[1] && x.activo); return s ? s.lugar_id : null;
+}
+function telWhatsapp(t) { t = soloDigitos(t); return t.length === 8 ? CONFIG.prefijoPais + t : t; }
+
+/* ---------- ventana de formulario ---------- */
+function hoja(titulo, contenido, alCerrar) {
+  const velo = h("div", { class: "velo" });
+  const cerrar = () => { velo.remove(); if (alCerrar) alCerrar(); };
+  velo.addEventListener("click", e => { if (e.target === velo) cerrar(); });
+  velo.append(h("div", { class: "hoja" },
+    h("div", { class: "fila" }, h("h2", { class: "crece" }, titulo), h("button", { class: "btn sec chico", onclick: cerrar }, "Cerrar")),
+    contenido));
+  document.body.append(velo);
+  return cerrar;
+}
+/* campos: [{clave, etiqueta, tipo: text|tel|number|date|color|check|select|dias|multi|area, opciones, ayuda, obligatorio}] */
+function formulario(titulo, campos, inicial, textoBoton) {
+  return new Promise(resolver => {
+    const ctl = {}; let resuelto = false;
+    const cuerpo = h("div", { class: "pila" });
+    for (const c of campos) {
+      const v = inicial && inicial[c.clave] !== undefined ? inicial[c.clave] : c.defecto;
+      let nodo;
+      if (c.tipo === "check") {
+        const i = h("input", { type: "checkbox", checked: !!v, id: "f-" + c.clave }); ctl[c.clave] = () => i.checked;
+        nodo = h("label", { class: "marca-check" }, i, c.etiqueta);
+      } else if (c.tipo === "select") {
+        const s = h("select", { id: "f-" + c.clave }, c.opciones.map(([val, txt]) => h("option", { value: String(val) }, txt)));
+        s.value = v === null || v === undefined ? "" : String(v); ctl[c.clave] = () => s.value;
+        nodo = h("label", { class: "campo" }, c.etiqueta, s);
+      } else if (c.tipo === "dias") {
+        const cs = DIAS.map((d, i) => h("input", { type: "checkbox", checked: (v || []).includes(i + 1) }));
+        ctl[c.clave] = () => cs.map((x, i) => x.checked ? i + 1 : 0).filter(Boolean);
+        nodo = h("div", { class: "campo" }, c.etiqueta, h("div", { class: "dias" }, DIAS.map((d, i) => h("label", {}, cs[i], d))));
+      } else if (c.tipo === "multi") {
+        const cs = c.opciones.map(([val]) => h("input", { type: "checkbox", checked: (v || []).includes(val) }));
+        ctl[c.clave] = () => c.opciones.map(([val], i) => cs[i].checked ? val : null).filter(Boolean);
+        nodo = h("div", { class: "campo" }, c.etiqueta, c.opciones.map(([, txt], i) => h("label", { class: "marca-check" }, cs[i], txt)));
+      } else if (c.tipo === "area") {
+        const t = h("textarea", { rows: 3, id: "f-" + c.clave }); t.value = v || ""; ctl[c.clave] = () => t.value.trim();
+        nodo = h("label", { class: "campo" }, c.etiqueta, t);
+      } else {
+        const i = h("input", { type: c.tipo || "text", id: "f-" + c.clave, inputMode: c.tipo === "tel" || c.tipo === "number" ? "numeric" : null });
+        i.value = v === null || v === undefined ? "" : v; ctl[c.clave] = () => i.value.trim();
+        if (c.tipo === "color") i.style.cssText = "padding:4px;height:48px";
+        nodo = h("label", { class: "campo" }, c.etiqueta, i);
+      }
+      cuerpo.append(nodo);
+      if (c.ayuda) cuerpo.append(h("p", { class: "suave" }, c.ayuda));
+    }
+    const err = h("div", { class: "error-caja", hidden: true });
+    const enviar = () => {
+      const val = {}; for (const c of campos) val[c.clave] = ctl[c.clave]();
+      const falta = campos.find(c => c.obligatorio && (val[c.clave] === "" || val[c.clave] === null));
+      if (falta) { err.textContent = "Falta: " + falta.etiqueta; err.hidden = false; return; }
+      resuelto = true; cerrar(); resolver(val);
+    };
+    cuerpo.append(err, h("button", { class: "btn ancho", onclick: enviar }, textoBoton || "Guardar"));
+    const cerrar = hoja(titulo, cuerpo, () => { if (!resuelto) resolver(null); });
+  });
+}
+/* ---------- imágenes ---------- */
+async function comprimirFoto(archivo) {
+  let img;
+  try { img = await createImageBitmap(archivo); }
+  catch { img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = URL.createObjectURL(archivo); }); }
+  const max = 1280, esc = Math.min(1, max / Math.max(img.width, img.height));
+  const c = document.createElement("canvas"); c.width = Math.round(img.width * esc); c.height = Math.round(img.height * esc);
+  c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+  return await new Promise(res => c.toBlob(res, "image/jpeg", 0.7));
+}
+async function urlFirmada(cubo, ruta) {
+  const r = await sb.storage.from(cubo).createSignedUrl(ruta, 3600);
+  return r.error ? null : r.data.signedUrl;
+}
+
+/* ---------- arranque y sesión ---------- */
+async function cargarBase() {
+  const [lug, ser, aj] = await Promise.all([
+    sb.from("lugares").select("*").order("id"),
+    sb.from("series").select("*").order("letra"),
+    sb.from("ajustes").select("*")
+  ]);
+  E.lugares = ok(lug); E.series = ok(ser); E.ajustes = Object.fromEntries(ok(aj).map(a => [a.clave, a.valor]));
+}
+async function iniciar() {
+  const { data } = await sb.auth.getSession();
+  E.sesion = data.session;
+  if (!E.sesion) return pantallaEntrar();
+  $app.replaceChildren(h("div", { class: "centro" }, h("p", { class: "suave" }, "Cargando…")));
+  try {
+    E.perfil = ok(await sb.from("perfiles").select("*").eq("id", E.sesion.user.id).maybeSingle());
+    if (!E.perfil || !E.perfil.activo) return pantallaInactivo();
+    await cargarBase();
+  } catch (e) { return pantallaError(e); }
+  let guardado = null; try { guardado = Number(localStorage.getItem("brinco-lugar")) || null; } catch {}
+  const activos = E.lugares.filter(l => l.activo);
+  E.lugarId = (activos.find(l => l.id === guardado) || activos.find(l => l.id === E.perfil.lugar_id) || activos[0] || {}).id || null;
+  marco(); ir(E.pestana);
+}
+function pantallaEntrar() {
+  const correo = h("input", { type: "email", id: "correo", autocomplete: "username" });
+  const clave = h("input", { type: "password", id: "clave", autocomplete: "current-password" });
+  const err = h("div", { class: "error-caja", hidden: true });
+  const boton = h("button", { class: "btn ancho", type: "submit" }, "Entrar");
+  const f = h("form", { class: "pila", onsubmit: async e => {
+    e.preventDefault(); err.hidden = true; boton.disabled = true;
+    const r = await sb.auth.signInWithPassword({ email: correo.value.trim(), password: clave.value });
+    boton.disabled = false;
+    if (r.error) { err.textContent = traducir(r.error.message); err.hidden = false; return; }
+    iniciar();
+  } }, h("label", { class: "campo" }, "Correo", correo), h("label", { class: "campo" }, "Contraseña", clave), err, boton);
+  $app.replaceChildren(h("div", { class: "centro" },
+    h("div", { class: "logo" }, "Brin", h("span", {}, "co")),
+    h("p", { class: "suave" }, "por Bunny Express · Tu paquete da el siguiente salto"), f));
+}
+function pantallaInactivo() {
+  $app.replaceChildren(h("div", { class: "centro" },
+    h("div", { class: "logo" }, "Brin", h("span", {}, "co")),
+    h("div", { class: "aviso-caja" }, "Tu usuario todavía no está activado. Pide al administrador que lo active."),
+    h("button", { class: "btn sec", onclick: salir }, "Cerrar sesión")));
+}
+function pantallaError(e) {
+  $app.replaceChildren(h("div", { class: "centro" },
+    h("div", { class: "error-caja" }, "No se pudo cargar: " + traducir(e.message)),
+    h("button", { class: "btn", onclick: iniciar }, "Reintentar"),
+    h("button", { class: "btn sec", onclick: salir }, "Cerrar sesión")));
+}
+async function salir() { await sb.auth.signOut(); E.sesion = null; E.perfil = null; E.lote = null; E.pestana = "recibir"; pantallaEntrar(); }
+
+function marco() {
+  const selector = h("select", { class: "lugar", id: "lugar-actual", "aria-label": "Lugar donde estás trabajando", onchange: e => {
+    E.lugarId = Number(e.target.value); try { localStorage.setItem("brinco-lugar", String(E.lugarId)); } catch {}
+    E.lote = null; ir(E.pestana);
+  } }, E.lugares.filter(l => l.activo).map(l => h("option", { value: String(l.id) }, "📍 " + l.nombre)));
+  selector.value = String(E.lugarId);
+  const tabs = [["recibir", "Recibir"], ["buscar", "Buscar y entregar"], ["despacho", "Despacho"], ["mas", "Más"]];
+  $app.replaceChildren(
+    h("header", { class: "barra" }, h("span", { class: "marca" }, "Brinco"), selector),
+    h("main", { id: "principal" }),
+    h("nav", { class: "pestanas" }, h("div", { class: "dentro" },
+      tabs.map(([k, t]) => h("button", { id: "tab-" + k, onclick: () => ir(k) }, t)))));
+}
+const VISTAS = {};
+function ir(pestana, ...args) {
+  E.pestana = pestana;
+  document.querySelectorAll("nav.pestanas button").forEach(b => b.classList.toggle("activa", b.id === "tab-" + pestana));
+  const m = document.getElementById("principal");
+  pon(m, h("p", { class: "suave" }, "Cargando…"));
+  window.scrollTo(0, 0);
+  Promise.resolve(VISTAS[pestana](m, ...args)).catch(e => { console.error(e); pon(m, h("div", { class: "error-caja" }, traducir(e.message))); });
+}
+
+/* =====================================================================
+   RECIBIR
+   ===================================================================== */
+VISTAS.recibir = async function (m) {
+  if (E.lote) return vistaLote(m);
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+  const lotes = ok(await sb.from("lotes").select("id, creado_en, avisado_en, vendedoras(nombre)")
+    .eq("lugar_id", E.lugarId).gte("creado_en", hoy.toISOString()).order("creado_en", { ascending: false }).limit(15));
+  const busca = h("input", { type: "text", id: "busca-vendedora", placeholder: "Nombre o celular de la vendedora", autocomplete: "off" });
+  const res = h("div", { class: "lista-simple" });
+  let t = null;
+  const buscar = async () => {
+    const q = busca.value.trim().replace(/[,()"%*]/g, "");
+    if (q.length < 2) { res.replaceChildren(); return; }
+    const d = soloDigitos(q);
+    const filtro = d.length >= 3 && d.length === q.length ? `telefono.like.*${d}*` : `nombre.ilike.*${q}*`;
+    const vs = await intentar(async () => ok(await sb.from("vendedoras").select("*").or(filtro).order("nombre").limit(8)));
+    if (!vs) return;
+    res.replaceChildren(
+      ...vs.map(v => h("div", { class: "fila toca", onclick: () => empezarLote(v) },
+        h("div", { class: "crece" }, h("strong", {}, v.nombre), h("div", { class: "suave" }, v.telefono || "sin celular")),
+        h("span", { class: "btn sec chico" }, "Elegir"))),
+      h("div", {}, h("button", { class: "btn sec ancho", id: "nueva-vendedora", onclick: () => nuevaVendedora(q) }, "+ Registrar vendedora nueva")));
+  };
+  busca.addEventListener("input", () => { clearTimeout(t); t = setTimeout(buscar, 300); });
+  pon(m, 
+    h("h1", {}, "Recibir paquetes"),
+    h("p", { class: "suave" }, "Estás recibiendo en ", h("strong", {}, lugar(E.lugarId).nombre), ". Elige a la vendedora una sola vez."),
+    h("div", { class: "tarjeta" }, h("label", { class: "campo" }, "¿Quién deja los paquetes?", busca), res),
+    lotes.length ? h("div", { class: "tarjeta" }, h("h2", {}, "Lotes de hoy en este lugar"),
+      h("div", { class: "lista-simple" }, lotes.map(l => h("div", { class: "fila toca", onclick: () => abrirLote(l.id) },
+        h("div", { class: "crece" }, h("strong", {}, l.vendedoras ? l.vendedoras.nombre : "?"), h("div", { class: "suave" }, fecha(l.creado_en))),
+        l.avisado_en ? h("span", { class: "chip estado-pendiente" }, "Avisada") : h("span", { class: "chip estado-en_camino" }, "Sin avisar"))))) : null);
+};
+async function nuevaVendedora(sugerido) {
+  const d = soloDigitos(sugerido);
+  const v = await formulario("Vendedora nueva", [
+    { clave: "nombre", etiqueta: "Nombre o tienda", obligatorio: true },
+    { clave: "telefono", etiqueta: "Celular (WhatsApp)", tipo: "tel", ayuda: "A este número se envía el aviso con los códigos de retiro." },
+    { clave: "frecuente", etiqueta: "Es vendedora frecuente", tipo: "check" }
+  ], d.length === sugerido.length ? { telefono: d } : { nombre: sugerido });
+  if (!v) return;
+  const nueva = await intentar(async () => ok(await sb.from("vendedoras")
+    .insert({ nombre: v.nombre, telefono: soloDigitos(v.telefono) || null, frecuente: v.frecuente }).select().single()));
+  if (nueva) empezarLote(nueva);
+}
+async function empezarLote(v) {
+  const l = await intentar(async () => ok(await sb.from("lotes").insert({ vendedora_id: v.id, lugar_id: E.lugarId }).select().single()));
+  if (!l) return;
+  E.lote = { id: l.id, vendedora: v, paquetes: [], ultimo: "" };
+  ir("recibir");
+}
+async function abrirLote(id) {
+  const l = await intentar(async () => ok(await sb.from("lotes").select("*, vendedoras(*)").eq("id", id).single()));
+  if (!l) return;
+  E.lote = { id: l.id, vendedora: l.vendedoras, paquetes: [], ultimo: "", avisado: !!l.avisado_en };
+  ir("recibir");
+}
+async function cargarPaquetesLote() {
+  E.lote.paquetes = ok(await sb.from("paquetes_detalle").select("id,codigo,codigo_retiro,destino_id,estado,num_fotos,creado_en")
+    .eq("lote_id", E.lote.id).order("creado_en"));
+  if (!E.lote.ultimo && E.lote.paquetes.length) E.lote.ultimo = E.lote.paquetes[E.lote.paquetes.length - 1].codigo;
+}
+async function vistaLote(m) {
+  await cargarPaquetesLote();
+  const L = E.lote;
+  const codigo = h("input", { type: "text", class: "codigo", id: "codigo", autocomplete: "off", autocapitalize: "characters", placeholder: "Q0251" });
+  codigo.value = siguienteCodigo(L.ultimo);
+  const destinoCaja = h("div", {});
+  const destinoSel = h("select", { id: "destino-manual" }, h("option", { value: "" }, "Elige el destino…"),
+    E.lugares.filter(l => l.activo).map(l => h("option", { value: String(l.id) }, l.nombre)));
+  const pintarDestino = () => {
+    const c = limpiarCodigo(codigo.value), d = destinoDeCodigo(c);
+    if (d) destinoCaja.replaceChildren(h("div", { class: "destino-grande", style: "background:" + lugar(d).color }, "→ " + lugar(d).nombre));
+    else if (/^[A-Z]+/.test(c)) destinoCaja.replaceChildren(h("div", { class: "aviso-caja" }, "Esa letra no tiene destino configurado. Elígelo:"), destinoSel);
+    else destinoCaja.replaceChildren();
+  };
+  codigo.addEventListener("input", pintarDestino); pintarDestino();
+
+  const foto = h("input", { type: "file", id: "foto", accept: "image/*", capture: "environment", hidden: true });
+  const previa = h("img", { class: "vista-previa", hidden: true, alt: "Foto del paquete" });
+  const botonFoto = h("button", { class: "btn sec ancho", type: "button", onclick: () => foto.click() }, "📷 Tomar foto");
+  foto.addEventListener("change", () => {
+    const a = foto.files[0];
+    if (a) { previa.src = URL.createObjectURL(a); previa.hidden = false; botonFoto.textContent = "📷 Cambiar foto"; }
+  });
+  const guardar = h("button", { class: "btn ancho", id: "guardar-paquete" }, "Guardar y siguiente →");
+  guardar.addEventListener("click", () => intentar(async () => {
+    const c = limpiarCodigo(codigo.value);
+    if (!/^[A-Z]{1,3}[0-9]{1,6}$/.test(c)) throw new Error("Escribe el código: letras y luego números, por ejemplo Q0251.");
+    const fila = { codigo: c, lote_id: L.id, vendedora_id: L.vendedora.id, ubicacion_id: E.lugarId };
+    if (!destinoDeCodigo(c)) {
+      if (!destinoSel.value) throw new Error("Elige el destino del paquete.");
+      fila.destino_id = Number(destinoSel.value);
+    }
+    const p = ok(await sb.from("paquetes").insert(fila).select("id,codigo").single());
+    L.ultimo = p.codigo;
+    const a = foto.files[0];
+    if (a) {
+      try {
+        const blob = await comprimirFoto(a), ruta = `${p.id}/${Date.now()}.jpg`;
+        ok(await sb.storage.from("fotos").upload(ruta, blob, { contentType: "image/jpeg" }));
+        ok(await sb.from("fotos").insert({ paquete_id: p.id, ruta }));
+      } catch (e) { toast("Paquete guardado, pero la foto no se subió: " + traducir(e.message), "mal"); }
+    }
+    toast(p.codigo + " guardado", "bien");
+    ir("recibir");
+  }, guardar));
+
+  const marcados = new Set();
+  const unir = h("button", { class: "btn sec chico", hidden: true, onclick: () => intentar(async () => {
+    ok(await sb.rpc("unir_retiro", { p_ids: [...marcados] })); toast("Listo: un solo código para esos paquetes", "bien"); ir("recibir");
+  }) }, "Mismo código de retiro para los marcados");
+  const lista = h("div", { class: "lista-simple" }, L.paquetes.slice().reverse().map(p => {
+    const chk = h("input", { type: "checkbox", "aria-label": "Marcar " + p.codigo, onchange: e => {
+      e.target.checked ? marcados.add(p.id) : marcados.delete(p.id); unir.hidden = marcados.size < 2; } });
+    return h("label", { class: "fila" }, h("span", { class: "marca-check" }, chk),
+      h("div", { class: "crece" }, h("span", { class: "cod" }, p.codigo), " ", chipLugar(p.destino_id),
+        h("div", { class: "suave" }, "Retiro " + p.codigo_retiro + (p.num_fotos ? " · con foto" : " · sin foto"))));
+  }));
+
+  pon(m, 
+    h("div", { class: "fila" }, h("div", { class: "crece" }, h("h1", {}, L.vendedora.nombre),
+      h("p", { class: "suave" }, L.paquetes.length + " paquete(s) en este lote · " + lugar(E.lugarId).nombre)),
+      h("button", { class: "btn sec chico", onclick: () => { E.lote = null; ir("recibir"); } }, "Salir del lote")),
+    h("div", { class: "tarjeta" },
+      h("label", { class: "campo" }, "Código de la etiqueta", codigo), destinoCaja,
+      foto, botonFoto, previa, guardar),
+    L.paquetes.length ? h("div", { class: "tarjeta" },
+      h("div", { class: "fila" }, h("h2", { class: "crece" }, "En este lote"), unir),
+      h("p", { class: "suave" }, "Si varios paquetes son de la misma clienta, márcalos para que compartan un solo código de retiro."),
+      lista,
+      h("button", { class: "btn verde ancho", id: "terminar-lote", onclick: () => vistaAviso() }, "Terminar y avisar a la vendedora")) : null);
+  codigo.focus(); codigo.select();
+}
+function textoAviso(L) {
+  const activos = L.paquetes.filter(p => p.estado === "pendiente" || p.estado === "en_camino");
+  const lineas = activos.map(p => `• ${p.codigo} → ${lugar(p.destino_id).nombre} · código de retiro ${p.codigo_retiro}`);
+  return `Hola ${L.vendedora.nombre}, Bunny Express recibió ${activos.length} paquete(s):\n` + lineas.join("\n") +
+    `\n\nPase a cada clienta su código de retiro. Quien venga con el código puede recoger el paquete. Sin código no se entrega.`;
+}
+function vistaAviso() {
+  const L = E.lote, msg = textoAviso(L), tel = telWhatsapp(L.vendedora.telefono);
+  const marcar = () => intentar(async () => { ok(await sb.rpc("marcar_avisado", { p_lote: L.id })); L.avisado = true; });
+  const cuerpo = h("div", { class: "pila" },
+    h("pre", { class: "mensaje", id: "mensaje-aviso" }, msg),
+    tel ? h("a", { class: "btn verde ancho", href: `https://wa.me/${tel}?text=${encodeURIComponent(msg)}`, target: "_blank", rel: "noopener", onclick: marcar }, "Abrir WhatsApp con el mensaje")
+        : h("div", { class: "aviso-caja" }, "Esta vendedora no tiene celular registrado. Copia el mensaje y envíaselo."),
+    tel ? h("a", { class: "btn sec ancho", href: `sms:+${tel}?body=${encodeURIComponent(msg)}`, onclick: marcar }, "Enviar por SMS") : null,
+    h("button", { class: "btn sec ancho", onclick: async () => {
+      try { await navigator.clipboard.writeText(msg); toast("Mensaje copiado", "bien"); marcar(); }
+      catch { toast("No se pudo copiar. Mantén presionado el texto para copiarlo.", "mal"); }
+    } }, "Copiar mensaje"),
+    h("button", { class: "btn oscuro ancho", onclick: () => { cerrar(); E.lote = null; ir("recibir"); } }, "Listo, recibir a otra vendedora"));
+  const cerrar = hoja("Aviso para " + L.vendedora.nombre, cuerpo);
+}
+
+/* =====================================================================
+   BUSCAR Y ENTREGAR
+   ===================================================================== */
+VISTAS.buscar = async function (m, inicial) {
+  const q = h("input", { type: "text", id: "buscar", placeholder: "Código de retiro, Q0251, vendedora o celular", autocomplete: "off", autocapitalize: "characters" });
+  const cerrados = h("input", { type: "checkbox", id: "ver-cerrados" });
+  const res = h("div", { class: "pila" });
+  const buscar = () => intentar(async () => {
+    const texto = q.value.trim().replace(/[,()"%*]/g, "");
+    if (texto.length < 2) { res.replaceChildren(h("p", { class: "suave" }, "Escribe al menos 2 caracteres.")); return; }
+    const d = soloDigitos(texto), cod = limpiarCodigo(texto);
+    let filtros;
+    if (d.length === texto.length) {
+      filtros = [`numero.eq.${Number(d)}`];
+      if (d.length === 6) filtros.push(`codigo_retiro.eq.${d}`);
+      if (d.length >= 4) filtros.push(`vendedora_tel.like.*${d}`, `cliente_tel.like.*${d}`);
+    } else if (/^[A-Z]{1,3}[0-9]{1,6}$/.test(cod)) filtros = [`codigo.eq.${cod}`];
+    else filtros = [`vendedora.ilike.*${texto}*`, `cliente_nombre.ilike.*${texto}*`];
+    let cons = sb.from("paquetes_detalle").select("*").or(filtros.join(",")).order("creado_en", { ascending: false }).limit(60);
+    if (!cerrados.checked) cons = cons.in("estado", ["pendiente", "en_camino"]);
+    const ps = ok(await cons);
+    pintarResultados(res, ps, d.length === 6 ? d : null);
+  });
+  q.addEventListener("keydown", e => { if (e.key === "Enter") buscar(); });
+  pon(m, h("h1", {}, "Buscar y entregar"),
+    h("div", { class: "tarjeta" }, q,
+      h("label", { class: "marca-check" }, cerrados, "Incluir entregados, devueltos y anulados"),
+      h("button", { class: "btn ancho", id: "boton-buscar", onclick: buscar }, "Buscar")), res);
+  if (inicial) { q.value = inicial; buscar(); } else q.focus();
+};
+function tarjetaPaquete(p) {
+  return h("div", { class: "tarjeta toca", onclick: () => vistaPaquete(p.id) },
+    h("div", { class: "fila" }, h("span", { class: "cod crece" }, p.codigo), chipEstado(p.estado)),
+    h("div", { class: "fila" }, chipLugar(p.destino_id, "→ " + p.destino), h("span", { class: "suave" }, "Está en " + p.ubicacion)),
+    h("div", { class: "suave" }, p.vendedora + " · ingresó " + fecha(p.creado_en) + " · " + diasDesde(p.creado_en) + " día(s)"));
+}
+function pintarResultados(res, ps, retiro) {
+  if (!ps.length) { res.replaceChildren(h("div", { class: "aviso-caja" }, "No se encontró ningún paquete.")); return; }
+  const nodos = [];
+  if (retiro) {
+    const delCodigo = ps.filter(p => p.codigo_retiro === retiro && p.estado === "pendiente");
+    const aqui = delCodigo.filter(p => p.ubicacion_id === E.lugarId);
+    if (aqui.length) nodos.push(h("div", { class: "tarjeta" },
+      h("div", { class: "ok-caja" }, "Código de retiro válido: " + aqui.map(p => p.codigo).join(", ")),
+      h("button", { class: "btn verde ancho", id: "entregar-por-codigo", onclick: () => vistaEntregar(aqui, retiro) }, `Entregar ${aqui.length} paquete(s)`)));
+    else if (delCodigo.length) nodos.push(h("div", { class: "aviso-caja" }, "El código es válido, pero el paquete no está en " + lugar(E.lugarId).nombre + ". Mira dónde está:"));
+  }
+  nodos.push(...ps.map(tarjetaPaquete));
+  res.replaceChildren(...nodos);
+}
+async function vistaPaquete(id) {
+  const p = await intentar(async () => ok(await sb.from("paquetes_detalle").select("*").eq("id", id).single()));
+  if (!p) return;
+  const fotos = h("div", { class: "fotos" });
+  const cuerpo = h("div", { class: "pila" });
+  const recargar = () => { cerrar(); if (E.pestana === "buscar") document.getElementById("boton-buscar")?.click(); else ir(E.pestana); };
+  const accion = (texto, clase, fn) => { const b = h("button", { class: "btn ancho " + clase }, texto); b.addEventListener("click", () => intentar(fn, b)); return b; };
+  cuerpo.append(
+    h("div", { class: "fila" }, h("span", { class: "cod crece" }, p.codigo), chipEstado(p.estado)),
+    h("div", { class: "destino-grande", style: "background:" + p.destino_color }, "→ " + p.destino),
+    h("div", { class: "lista-simple" },
+      h("div", {}, "Está en: ", h("strong", {}, p.ubicacion), p.estado === "en_camino" ? " (en camino)" : ""),
+      h("div", {}, "Vendedora: ", h("strong", {}, p.vendedora), p.vendedora_tel ? " · " + p.vendedora_tel : ""),
+      p.cliente_nombre || p.cliente_tel ? h("div", {}, "Clienta: " + [p.cliente_nombre, p.cliente_tel].filter(Boolean).join(" · ")) : null,
+      h("div", {}, "Ingresó: " + fecha(p.creado_en) + (p.recibio ? " · lo recibió " + p.recibio : "") + " · " + diasDesde(p.creado_en) + " día(s)"),
+      p.salidas_al_destino ? h("div", {}, "Salidas a su punto: " + p.salidas_al_destino) : null,
+      p.notas ? h("div", {}, "Notas: " + p.notas) : null,
+      p.estado === "entregado" ? h("div", {}, h("strong", {}, "Entregado " + fecha(p.cerrado_en)), " por " + (p.cerro || "?"),
+        h("div", {}, "Recogió: " + p.retiro_nombre + " · " + p.retiro_celular + " · " + (p.retiro_es_titular ? "titular" : (p.retiro_parentesco || "no es titular"))),
+        h("div", { class: p.retiro_con_codigo ? "suave" : "error-caja" }, p.retiro_con_codigo ? "Con código de retiro" : "ENTREGADO SIN CÓDIGO")) : null,
+      p.motivo ? h("div", {}, "Motivo: " + p.motivo) : null,
+      p.intentos_fallidos >= 5 ? h("div", { class: "error-caja" }, "Bloqueado por 5 códigos incorrectos.") : null),
+    fotos);
+  if (p.estado === "pendiente") {
+    cuerpo.append(
+      accion("Entregar", "verde", async () => { cerrar(); vistaEntregar([p], null); }),
+      accion("Cambiar destino o notas", "sec", async () => {
+        const v = await formulario("Corregir " + p.codigo, [
+          { clave: "destino_id", etiqueta: "Destino", tipo: "select", opciones: E.lugares.filter(l => l.activo || l.id === p.destino_id).map(l => [l.id, l.nombre]) },
+          { clave: "cliente_nombre", etiqueta: "Nombre de la clienta (opcional)" },
+          { clave: "cliente_tel", etiqueta: "Celular de la clienta (opcional)", tipo: "tel" },
+          { clave: "notas", etiqueta: "Notas", tipo: "area" }], p);
+        if (!v) return;
+        ok(await sb.from("paquetes").update({ destino_id: Number(v.destino_id), cliente_nombre: v.cliente_nombre || null,
+          cliente_tel: soloDigitos(v.cliente_tel) || null, notas: v.notas || null }).eq("id", p.id));
+        toast("Guardado", "bien"); recargar();
+      }),
+      accion("Devolver a la vendedora", "sec", async () => {
+        const v = await formulario("Devolver " + p.codigo, [{ clave: "motivo", etiqueta: "Motivo de la devolución", obligatorio: true }], null, "Devolver");
+        if (!v) return; ok(await sb.rpc("devolver_paquetes", { p_ids: [p.id], p_motivo: v.motivo })); toast("Devuelto a la vendedora", "bien"); recargar();
+      }));
+    if (puede("anular")) cuerpo.append(accion("Anular (registro por error)", "rojo", async () => {
+      const v = await formulario("Anular " + p.codigo, [{ clave: "motivo", etiqueta: "Motivo de la anulación", obligatorio: true }], null, "Anular");
+      if (!v) return; ok(await sb.rpc("anular_paquete", { p_id: p.id, p_motivo: v.motivo })); toast("Anulado", "bien"); recargar();
+    }));
+    if (p.intentos_fallidos >= 5 && E.perfil.rol === "admin") cuerpo.append(accion("Desbloquear", "oscuro", async () => {
+      ok(await sb.rpc("desbloquear_paquete", { p_id: p.id })); toast("Desbloqueado", "bien"); recargar();
+    }));
+  } else if (p.estado !== "en_camino" && E.perfil.rol === "admin") {
+    cuerpo.append(accion("Reabrir (corregir un error)", "sec", async () => {
+      const v = await formulario("Reabrir " + p.codigo, [{ clave: "motivo", etiqueta: "¿Por qué se reabre?", obligatorio: true }], null, "Reabrir");
+      if (!v) return; ok(await sb.rpc("reabrir_paquete", { p_id: p.id, p_motivo: v.motivo })); toast("Reabierto", "bien"); recargar();
+    }));
+  }
+  const cerrar = hoja("Paquete " + p.codigo, cuerpo);
+  const fs = await sb.from("fotos").select("ruta").eq("paquete_id", id).is("eliminada_en", null);
+  for (const f of fs.data || []) { const u = await urlFirmada("fotos", f.ruta); if (u) fotos.append(h("img", { src: u, alt: "Foto de " + p.codigo })); }
+  if (p.retiro_firma) { const u = await urlFirmada("firmas", p.retiro_firma); if (u) fotos.append(h("img", { src: u, alt: "Firma de quien recogió" })); }
+}
+function lienzoFirma() {
+  const c = h("canvas", { class: "firma", id: "firma", width: 600, height: 240 });
+  const g = c.getContext("2d"); let dibujando = false, hay = false;
+  const limpiar = () => { g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height); g.strokeStyle = "#0f3d40"; g.lineWidth = 3; g.lineCap = "round"; g.lineJoin = "round"; hay = false; };
+  limpiar();
+  const pos = e => { const r = c.getBoundingClientRect(); return [(e.clientX - r.left) * c.width / r.width, (e.clientY - r.top) * c.height / r.height]; };
+  c.addEventListener("pointerdown", e => { dibujando = true; c.setPointerCapture(e.pointerId); const [x, y] = pos(e); g.beginPath(); g.moveTo(x, y); e.preventDefault(); });
+  c.addEventListener("pointermove", e => { if (!dibujando) return; const [x, y] = pos(e); g.lineTo(x, y); g.stroke(); hay = true; });
+  c.addEventListener("pointerup", () => { dibujando = false; });
+  c.addEventListener("pointercancel", () => { dibujando = false; });
+  return { lienzo: c, limpiar, vacia: () => !hay, blob: () => new Promise(res => c.toBlob(res, "image/png")) };
+}
+function vistaEntregar(paquetes, codigoPrevio) {
+  const pide = paquetes.some(p => lugar(p.ubicacion_id).pide_codigo !== false);
+  const codigo = h("input", { type: "text", id: "ent-codigo", inputMode: "numeric", maxLength: 6, class: "codigo", placeholder: "000000" });
+  codigo.value = codigoPrevio || "";
+  const nombre = h("input", { type: "text", id: "ent-nombre", autocomplete: "off" });
+  const celular = h("input", { type: "tel", id: "ent-celular", inputMode: "numeric", autocomplete: "off" });
+  const titular = h("select", { id: "ent-titular" }, h("option", { value: "" }, "Elige…"), h("option", { value: "si" }, "Sí, es la titular"), h("option", { value: "no" }, "No, viene de su parte"));
+  const parentesco = h("input", { type: "text", id: "ent-parentesco", placeholder: "hermano, amiga, esposo…" });
+  const cajaParentesco = h("label", { class: "campo", hidden: true }, "¿Qué es de la titular?", parentesco);
+  titular.addEventListener("change", () => { cajaParentesco.hidden = titular.value !== "no"; });
+  const sinCodigo = h("input", { type: "checkbox", id: "ent-sin-codigo" });
+  const carnet = h("input", { type: "text", id: "ent-carnet", inputMode: "numeric" });
+  const motivo = h("input", { type: "text", id: "ent-motivo", placeholder: "perdió el celular, no le llegó el mensaje…" });
+  const cajaSin = h("div", { class: "pila", hidden: true }, h("label", { class: "campo" }, "Número de carnet", carnet), h("label", { class: "campo" }, "Motivo", motivo));
+  sinCodigo.addEventListener("change", () => { cajaSin.hidden = !sinCodigo.checked; codigo.disabled = sinCodigo.checked; });
+  const F = lienzoFirma();
+  const err = h("div", { class: "error-caja", id: "ent-error", hidden: true });
+  const boton = h("button", { class: "btn verde ancho", id: "ent-confirmar" }, `Entregar ${paquetes.length} paquete(s)`);
+  boton.addEventListener("click", async () => {
+    err.hidden = true;
+    const falla = t => { err.textContent = t; err.hidden = false; };
+    const cod = soloDigitos(codigo.value), sin = pide && sinCodigo.checked;
+    if (pide && !sin && cod.length !== 6) return falla("Escribe el código de retiro de 6 dígitos.");
+    if (!nombre.value.trim()) return falla("Escribe el nombre de quien recoge.");
+    if (!/^\d{6,15}$/.test(soloDigitos(celular.value))) return falla("Escribe el celular de quien recoge.");
+    if (!titular.value) return falla("Indica si quien recoge es la titular.");
+    if (sin && (!carnet.value.trim() || !motivo.value.trim())) return falla("Sin código: anota el carnet y el motivo.");
+    if (F.vacia()) return falla("Falta la firma.");
+    boton.disabled = true;
+    try {
+      const ruta = `${new Date().toISOString().slice(0, 7)}/${crypto.randomUUID()}.png`;
+      ok(await sb.storage.from("firmas").upload(ruta, await F.blob(), { contentType: "image/png" }));
+      const r = ok(await sb.rpc("entregar_paquetes", {
+        p_ids: paquetes.map(p => p.id), p_codigo: sin || !pide ? (pide ? null : (cod || null)) : cod,
+        p_nombre: nombre.value.trim(), p_celular: soloDigitos(celular.value), p_es_titular: titular.value === "si",
+        p_parentesco: titular.value === "no" ? parentesco.value.trim() : null, p_firma: ruta,
+        p_carnet: sin ? carnet.value.trim() : null, p_motivo: sin ? motivo.value.trim() : null }));
+      if (!r.ok) { falla(r.mensaje + " Quedan pocos intentos antes de que se bloquee."); return; }
+      cerrar(); toast(`Entregado: ${paquetes.map(p => p.codigo).join(", ")}`, "bien"); ir("buscar");
+    } catch (e) { falla(traducir(e.message)); }
+    finally { boton.disabled = false; }
+  });
+  const cuerpo = h("div", { class: "pila" },
+    h("div", { class: "fila" }, paquetes.map(p => h("span", { class: "chip" }, p.codigo))),
+    pide ? h("label", { class: "campo" }, "Código de retiro", codigo) : h("div", { class: "aviso-caja" }, "En este lugar no se exige código de retiro."),
+    pide && puede("entregar_sin_codigo") ? h("label", { class: "marca-check" }, sinCodigo, "No tiene el código (entregar con carnet)") : null, cajaSin,
+    h("label", { class: "campo" }, "Nombre de quien recoge", nombre),
+    h("label", { class: "campo" }, "Celular de quien recoge", celular),
+    h("label", { class: "campo" }, "¿Es la titular del paquete?", titular), cajaParentesco,
+    h("div", { class: "campo" }, h("div", { class: "fila" }, h("span", { class: "crece" }, "Firma con el dedo"), h("button", { class: "btn sec chico", type: "button", onclick: F.limpiar }, "Borrar firma")), F.lienzo),
+    err, boton);
+  const cerrar = hoja("Entregar", cuerpo);
+}
+
+/* =====================================================================
+   DESPACHO
+   ===================================================================== */
+VISTAS.despacho = async function (m) {
+  const ds = ok(await sb.from("despachos").select("*").or(`origen_id.eq.${E.lugarId},destino_id.eq.${E.lugarId}`).order("creado_en", { ascending: false }).limit(20));
+  let cuentas = {};
+  if (ds.length) {
+    const its = ok(await sb.from("despacho_items").select("despacho_id,recibido").in("despacho_id", ds.map(d => d.id)));
+    for (const i of its) { const c = cuentas[i.despacho_id] || (cuentas[i.despacho_id] = { total: 0, ok: 0 }); c.total++; if (i.recibido) c.ok++; }
+  }
+  pon(m, h("h1", {}, "Despacho"),
+    h("p", { class: "suave" }, "Mueve paquetes entre lugares y cuenta cuántos llegan. Estás en ", h("strong", {}, lugar(E.lugarId).nombre), "."),
+    h("button", { class: "btn ancho", id: "nuevo-despacho", onclick: () => ir("despacho_nuevo") }, "+ Nuevo despacho desde " + lugar(E.lugarId).nombre),
+    h("div", { class: "tarjeta" }, h("h2", {}, "Despachos recientes de este lugar"),
+      ds.length ? h("div", { class: "lista-simple" }, ds.map(d => {
+        const c = cuentas[d.id] || { total: 0, ok: 0 }, falta = c.total - c.ok;
+        return h("div", { class: "fila toca", onclick: () => ir("despacho_ver", d.id) },
+          h("div", { class: "crece" }, h("strong", {}, lugar(d.origen_id).nombre + " → " + lugar(d.destino_id).nombre),
+            h("div", { class: "suave" }, fecha(d.creado_en) + " · llegaron " + c.ok + " de " + c.total)),
+          falta ? h("span", { class: "chip " + (d.estado === "cerrado" ? "estado-anulado" : "estado-en_camino") }, (d.estado === "cerrado" ? "Faltan " : "En camino ") + falta)
+                : h("span", { class: "chip estado-pendiente" }, "Completo"));
+      })) : h("p", { class: "suave" }, "Todavía no hay despachos.")));
+};
+VISTAS.despacho_nuevo = async function (m) {
+  E.pestana = "despacho"; document.getElementById("tab-despacho").classList.add("activa");
+  const destinos = E.lugares.filter(l => l.activo && l.id !== E.lugarId);
+  const sel = h("select", { id: "desp-destino" }, h("option", { value: "" }, "Elige a dónde van…"), destinos.map(l => h("option", { value: String(l.id) }, l.nombre)));
+  const soloDestino = h("input", { type: "checkbox", id: "desp-solo", checked: true });
+  const lista = h("div", { class: "lista-simple" });
+  const boton = h("button", { class: "btn ancho", id: "desp-enviar", disabled: true }, "Despachar");
+  const ps = ok(await sb.from("paquetes_detalle").select("id,codigo,destino_id,destino,vendedora,creado_en")
+    .eq("ubicacion_id", E.lugarId).eq("estado", "pendiente").order("codigo").limit(2000));
+  const elegidos = new Set();
+  const pintar = () => {
+    const dest = Number(sel.value) || null; elegidos.clear();
+    const visibles = !dest ? [] : (soloDestino.checked ? ps.filter(p => p.destino_id === dest) : ps);
+    visibles.forEach(p => elegidos.add(p.id));
+    const actualizar = () => { boton.disabled = !elegidos.size; boton.textContent = elegidos.size ? `Despachar ${elegidos.size} paquete(s)` : "Despachar"; };
+    lista.replaceChildren(...(dest ? (visibles.length ? visibles.map(p => h("label", { class: "fila" },
+      h("span", { class: "marca-check" }, h("input", { type: "checkbox", checked: true, onchange: e => { e.target.checked ? elegidos.add(p.id) : elegidos.delete(p.id); actualizar(); } })),
+      h("div", { class: "crece" }, h("span", { class: "cod" }, p.codigo), " ", chipLugar(p.destino_id), h("div", { class: "suave" }, p.vendedora + " · " + diasDesde(p.creado_en) + " día(s)"))))
+      : [h("p", { class: "suave" }, "No hay paquetes pendientes aquí para ese destino.")]) : [h("p", { class: "suave" }, "Elige el destino para ver los paquetes.")]));
+    actualizar();
+  };
+  sel.addEventListener("change", () => { const l = lugar(Number(sel.value)); soloDestino.checked = l.tipo !== "local"; pintar(); });
+  soloDestino.addEventListener("change", pintar);
+  boton.addEventListener("click", () => intentar(async () => {
+    const id = ok(await sb.rpc("iniciar_despacho", { p_origen: E.lugarId, p_destino: Number(sel.value), p_paquetes: [...elegidos] }));
+    toast(`Despacho creado con ${elegidos.size} paquete(s)`, "bien"); ir("despacho_ver", id);
+  }, boton));
+  pon(m, h("div", { class: "fila" }, h("h1", { class: "crece" }, "Nuevo despacho"), h("button", { class: "btn sec chico", onclick: () => ir("despacho") }, "Volver")),
+    h("p", { class: "suave" }, "Salen de " + lugar(E.lugarId).nombre + ". Hay " + ps.length + " paquete(s) pendientes aquí."),
+    h("div", { class: "tarjeta" }, h("label", { class: "campo" }, "Destino", sel),
+      h("label", { class: "marca-check" }, soloDestino, "Mostrar solo los que van a ese destino"), lista, boton));
+  pintar();
+};
+VISTAS.despacho_ver = async function (m, id) {
+  E.pestana = "despacho"; document.getElementById("tab-despacho").classList.add("activa");
+  const d = ok(await sb.from("despachos").select("*").eq("id", id).single());
+  const its = ok(await sb.from("despacho_items").select("paquete_id,recibido,recibido_en,paquetes(codigo)").eq("despacho_id", id));
+  its.sort((a, b) => a.paquetes.codigo.localeCompare(b.paquetes.codigo));
+  const faltan = its.filter(i => !i.recibido);
+  const confirmarUno = (i, donde) => intentar(async () => {
+    const args = { p_despacho: id, p_paquete: i.paquete_id }; if (donde) args.p_lugar = donde;
+    ok(await sb.rpc("confirmar_llegada", args)); ir("despacho_ver", id);
+  });
+  const rapido = h("input", { type: "text", class: "codigo", id: "desp-codigo", placeholder: "Código que llegó", autocomplete: "off", autocapitalize: "characters" });
+  rapido.addEventListener("keydown", e => {
+    if (e.key !== "Enter") return;
+    const c = limpiarCodigo(rapido.value), i = its.find(x => x.paquetes.codigo === c);
+    if (!i) return toast(c + " no es parte de este despacho", "mal");
+    if (i.recibido) return toast(c + " ya estaba confirmado");
+    confirmarUno(i);
+  });
+  pon(m, 
+    h("div", { class: "fila" }, h("h1", { class: "crece" }, lugar(d.origen_id).nombre + " → " + lugar(d.destino_id).nombre), h("button", { class: "btn sec chico", onclick: () => ir("despacho") }, "Volver")),
+    h("p", { class: "suave" }, "Salió " + fecha(d.creado_en) + (d.estado === "cerrado" ? " · cerrado " + fecha(d.cerrado_en) : " · en camino")),
+    h("div", { class: "rejilla2" },
+      h("div", { class: "tarjeta" }, h("span", { class: "suave" }, "Llegaron"), h("span", { class: "numero-grande", id: "desp-llegaron" }, (its.length - faltan.length) + " / " + its.length)),
+      h("div", { class: "tarjeta" }, h("span", { class: "suave" }, "Faltan"), h("span", { class: "numero-grande", id: "desp-faltan", style: faltan.length ? "color:var(--mal)" : "color:var(--bien)" }, faltan.length))),
+    faltan.length ? h("div", { class: "tarjeta" }, h("h2", {}, "Confirmar llegada"),
+      h("p", { class: "suave" }, "Escribe el código y presiona Enter, o toca “Llegó” en la lista."), rapido,
+      h("button", { class: "btn sec ancho", id: "desp-todos", onclick: () => intentar(async () => {
+        for (const i of faltan) ok(await sb.rpc("confirmar_llegada", { p_despacho: id, p_paquete: i.paquete_id }));
+        ir("despacho_ver", id);
+      }) }, "Llegaron todos los que faltan")) : h("div", { class: "ok-caja" }, "Llegaron todos los paquetes."),
+    h("div", { class: "tarjeta" }, h("h2", {}, "Paquetes"),
+      h("div", { class: "lista-simple" }, its.map(i => h("div", { class: "fila" },
+        h("span", { class: "cod crece" }, i.paquetes.codigo),
+        i.recibido ? h("span", { class: "chip estado-pendiente" }, "Llegó " + fecha(i.recibido_en))
+          : [h("button", { class: "btn chico verde", onclick: () => confirmarUno(i) }, "Llegó"),
+             h("button", { class: "btn chico sec", onclick: () => confirmarUno(i, d.origen_id) }, "No salió")])))),
+    d.estado === "en_camino" ? h("button", { class: "btn oscuro ancho", id: "desp-cerrar", onclick: () => intentar(async () => {
+      const n = ok(await sb.rpc("cerrar_despacho", { p_despacho: id }));
+      toast(n ? `Despacho cerrado. FALTAN ${n} paquete(s).` : "Despacho cerrado. Llegó todo.", n ? "mal" : "bien"); ir("despacho_ver", id);
+    }) }, "Cerrar despacho") : null);
+  if (faltan.length) rapido.focus();
+};
+
+/* =====================================================================
+   MÁS: resumen, configuración, usuarios, historial, fotos, respaldo
+   ===================================================================== */
+VISTAS.mas = async function (m) {
+  const op = (id, titulo, detalle, vista) => h("div", { class: "tarjeta toca", id, onclick: () => ir(vista) }, h("strong", {}, titulo), h("span", { class: "suave" }, detalle));
+  pon(m, h("h1", {}, "Más"),
+    h("p", { class: "suave" }, E.perfil.nombre + " · " + (E.perfil.rol === "admin" ? "Administrador" : "Trabajador")),
+    op("mas-resumen", "Resumen de paquetes", "Cuántos hay en cada lugar y cuáles llevan más días", "resumen"),
+    puede("configurar") ? op("mas-config", "Configuración", "Puntos de entrega, letras, días, feriados y ajustes", "config") : null,
+    E.perfil.rol === "admin" ? op("mas-usuarios", "Usuarios y permisos", "Activar trabajadores y decidir qué puede hacer cada uno", "usuarios") : null,
+    puede("ver_historial") ? op("mas-historial", "Historial", "Quién hizo qué y cuándo", "historial") : null,
+    puede("limpiar_fotos") ? op("mas-fotos", "Limpiar fotos antiguas", "Libera espacio borrando fotos de paquetes ya cerrados", "fotos") : null,
+    E.perfil.rol === "admin" ? op("mas-respaldo", "Descargar respaldo", "Todos los paquetes en un archivo para Excel", "respaldo") : null,
+    h("button", { class: "btn sec ancho", onclick: salir }, "Cerrar sesión"));
+};
+function volverMas(titulo) {
+  E.pestana = "mas"; document.getElementById("tab-mas").classList.add("activa");
+  return h("div", { class: "fila" }, h("h1", { class: "crece" }, titulo), h("button", { class: "btn sec chico", onclick: () => ir("mas") }, "Volver"));
+}
+VISTAS.resumen = async function (m) {
+  const cab = volverMas("Resumen");
+  const ps = ok(await sb.from("paquetes_detalle").select("id,codigo,estado,destino_id,ubicacion_id,vendedora,creado_en")
+    .in("estado", ["pendiente", "en_camino"]).order("creado_en").limit(5000));
+  const por = clave => { const r = {}; for (const p of ps) r[p[clave]] = (r[p[clave]] || 0) + 1; return r; };
+  const ub = por("ubicacion_id"), de = por("destino_id"), lim = ajusteNum("dias_devolver", 30);
+  const viejos = ps.filter(p => diasDesde(p.creado_en) >= 7).slice(0, 60);
+  const tabla = (titulo, datos) => h("div", { class: "tarjeta" }, h("h2", {}, titulo),
+    h("div", { class: "lista-simple" }, E.lugares.filter(l => datos[l.id]).map(l => h("div", { class: "fila" }, h("span", { class: "crece" }, chipLugar(l.id)), h("strong", {}, datos[l.id]))),
+      Object.keys(datos).length ? null : h("p", { class: "suave" }, "Nada por ahora.")));
+  pon(m, cab,
+    h("div", { class: "rejilla2" },
+      h("div", { class: "tarjeta" }, h("span", { class: "suave" }, "Paquetes activos"), h("span", { class: "numero-grande" }, ps.length)),
+      h("div", { class: "tarjeta" }, h("span", { class: "suave" }, "En camino"), h("span", { class: "numero-grande" }, ps.filter(p => p.estado === "en_camino").length))),
+    tabla("Dónde están ahora", ub), tabla("A dónde van", de),
+    h("div", { class: "tarjeta" }, h("h2", {}, "Llevan 7 días o más"),
+      h("p", { class: "suave" }, `A los ${lim} días se devuelven a la vendedora.`),
+      viejos.length ? h("div", { class: "lista-simple" }, viejos.map(p => h("div", { class: "fila toca", onclick: () => vistaPaquete(p.id) },
+        h("div", { class: "crece" }, h("span", { class: "cod" }, p.codigo), " ", chipLugar(p.destino_id), h("div", { class: "suave" }, p.vendedora + " · está en " + lugar(p.ubicacion_id).nombre)),
+        h("span", { class: "chip " + (diasDesde(p.creado_en) >= lim ? "estado-anulado" : "estado-en_camino") }, diasDesde(p.creado_en) + " días"))))
+        : h("p", { class: "suave" }, "Ningún paquete lleva tanto tiempo.")));
+};
+VISTAS.config = async function (m) {
+  const cab = volverMas("Configuración");
+  await cargarBase();
+  const fer = ok(await sb.from("feriados").select("*").order("fecha"));
+  const camposLugar = [
+    { clave: "nombre", etiqueta: "Nombre", obligatorio: true },
+    { clave: "tipo", etiqueta: "Tipo", tipo: "select", opciones: [["punto", "Punto de entrega"], ["local", "Local propio"]], defecto: "punto" },
+    { clave: "color", etiqueta: "Color", tipo: "color", defecto: "#888888" },
+    { clave: "direccion", etiqueta: "Dirección (opcional)" },
+    { clave: "dias", etiqueta: "Días de despacho", tipo: "dias", defecto: [1, 2, 3, 4, 5, 6] },
+    { clave: "despacha_feriados", etiqueta: "También se despacha en feriados", tipo: "check" },
+    { clave: "pide_codigo", etiqueta: "Exigir código de retiro al entregar", tipo: "check", defecto: true },
+    { clave: "activo", etiqueta: "Activo", tipo: "check", defecto: true }];
+  const editarLugar = l => intentar(async () => {
+    const v = await formulario(l ? "Editar " + l.nombre : "Nuevo lugar", camposLugar, l); if (!v) return;
+    const fila = { ...v, direccion: v.direccion || null };
+    ok(l ? await sb.from("lugares").update(fila).eq("id", l.id) : await sb.from("lugares").insert(fila));
+    toast("Guardado", "bien"); await cargarBase(); marco(); ir("config");
+  });
+  const nuevaLetra = () => intentar(async () => {
+    const v = await formulario("Nueva letra", [
+      { clave: "letra", etiqueta: "Letra o letras del código (1 a 3)", obligatorio: true, ayuda: "Ejemplo: C. Todos los códigos que empiecen con C irán a ese lugar." },
+      { clave: "lugar_id", etiqueta: "Va a", tipo: "select", opciones: E.lugares.filter(l => l.activo).map(l => [l.id, l.nombre]), defecto: E.lugares[0].id }]);
+    if (!v) return;
+    const letra = v.letra.toUpperCase().replace(/[^A-Z]/g, "");
+    if (!letra || letra.length > 3) throw new Error("La letra debe tener de 1 a 3 letras, sin números.");
+    ok(await sb.from("series").insert({ letra, lugar_id: Number(v.lugar_id) })); toast("Letra " + letra + " guardada", "bien"); ir("config");
+  });
+  const editarLetra = s => intentar(async () => {
+    const v = await formulario("Letra " + s.letra, [
+      { clave: "lugar_id", etiqueta: "Va a", tipo: "select", opciones: E.lugares.filter(l => l.activo || l.id === s.lugar_id).map(l => [l.id, l.nombre]) },
+      { clave: "activo", etiqueta: "Activa", tipo: "check" }], s);
+    if (!v) return;
+    ok(await sb.from("series").update({ lugar_id: Number(v.lugar_id), activo: v.activo }).eq("letra", s.letra)); toast("Guardado", "bien"); ir("config");
+  });
+  const nuevoFeriado = () => intentar(async () => {
+    const v = await formulario("Nuevo feriado", [{ clave: "fecha", etiqueta: "Fecha", tipo: "date", obligatorio: true }, { clave: "nombre", etiqueta: "Nombre (opcional)" }]);
+    if (!v) return; ok(await sb.from("feriados").insert({ fecha: v.fecha, nombre: v.nombre })); toast("Feriado agregado", "bien"); ir("config");
+  });
+  const AJ = [["intentos_despacho", "Salidas a un punto antes de quedarse en el local"], ["dias_borrar_fotos", "Días para borrar fotos de paquetes cerrados"],
+    ["dias_devolver", "Días de calendario hasta devolver a la vendedora"], ["dias_gracia_vendedora", "Días extra para que la vendedora retire"]];
+  const editarAjustes = () => intentar(async () => {
+    const v = await formulario("Ajustes", AJ.map(([clave, etiqueta]) => ({ clave, etiqueta, tipo: "number", obligatorio: true })), E.ajustes); if (!v) return;
+    for (const [clave] of AJ) {
+      const n = Number(v[clave]); if (!Number.isInteger(n) || n < 0) throw new Error("Los ajustes deben ser números enteros.");
+      if (n !== Number(E.ajustes[clave])) ok(await sb.from("ajustes").update({ valor: n }).eq("clave", clave));
+    }
+    toast("Ajustes guardados", "bien"); ir("config");
+  });
+  pon(m, cab,
+    h("div", { class: "tarjeta" }, h("div", { class: "fila" }, h("h2", { class: "crece" }, "Lugares"), h("button", { class: "btn chico", id: "cfg-nuevo-lugar", onclick: () => editarLugar(null) }, "+ Agregar")),
+      h("div", { class: "lista-simple" }, E.lugares.map(l => h("div", { class: "fila toca", onclick: () => editarLugar(l) },
+        h("div", { class: "crece" }, chipLugar(l.id), " ", l.activo ? null : h("span", { class: "chip estado-anulado" }, "Desactivado"),
+          h("div", { class: "suave" }, (l.tipo === "local" ? "Local propio" : "Punto") + " · " + (l.dias || []).map(d => DIAS[d - 1]).join(" ") +
+            " · letras: " + (E.series.filter(s => s.lugar_id === l.id && s.activo).map(s => s.letra).join(", ") || "ninguna"))),
+        h("span", { class: "btn sec chico" }, "Editar"))))),
+    h("div", { class: "tarjeta" }, h("div", { class: "fila" }, h("h2", { class: "crece" }, "Letras de los códigos"), h("button", { class: "btn chico", id: "cfg-nueva-letra", onclick: nuevaLetra }, "+ Agregar")),
+      h("p", { class: "suave" }, "La letra del código decide a dónde va el paquete."),
+      h("div", { class: "lista-simple" }, E.series.map(s => h("div", { class: "fila toca", onclick: () => editarLetra(s) },
+        h("span", { class: "cod" }, s.letra), h("span", { class: "crece" }, "→ ", chipLugar(s.lugar_id)),
+        s.activo ? null : h("span", { class: "chip estado-anulado" }, "Desactivada"), h("span", { class: "btn sec chico" }, "Editar"))))),
+    h("div", { class: "tarjeta" }, h("div", { class: "fila" }, h("h2", { class: "crece" }, "Feriados"), h("button", { class: "btn chico", id: "cfg-nuevo-feriado", onclick: nuevoFeriado }, "+ Agregar")),
+      fer.length ? h("div", { class: "lista-simple" }, fer.map(f => h("div", { class: "fila" },
+        h("div", { class: "crece" }, h("strong", {}, f.fecha.split("-").reverse().join("/")), f.nombre ? " · " + f.nombre : ""),
+        h("button", { class: "btn rojo chico", onclick: () => intentar(async () => { ok(await sb.from("feriados").delete().eq("fecha", f.fecha)); ir("config"); }) }, "Quitar"))))
+        : h("p", { class: "suave" }, "No hay feriados cargados.")),
+    h("div", { class: "tarjeta" }, h("div", { class: "fila" }, h("h2", { class: "crece" }, "Ajustes"), h("button", { class: "btn chico", id: "cfg-ajustes", onclick: editarAjustes }, "Cambiar")),
+      h("div", { class: "lista-simple" }, AJ.map(([clave, etiqueta]) => h("div", { class: "fila" }, h("span", { class: "crece" }, etiqueta), h("strong", {}, String(E.ajustes[clave] ?? "")))))));
+};
+VISTAS.usuarios = async function (m) {
+  const cab = volverMas("Usuarios y permisos");
+  const us = ok(await sb.from("perfiles").select("*").order("creado_en"));
+  const editar = u => intentar(async () => {
+    const v = await formulario(u.nombre || "Usuario", [
+      { clave: "nombre", etiqueta: "Nombre", obligatorio: true },
+      { clave: "activo", etiqueta: "Activo (puede entrar y trabajar)", tipo: "check" },
+      { clave: "rol", etiqueta: "Rol", tipo: "select", opciones: [["trabajador", "Trabajador"], ["admin", "Administrador (puede todo)"]] },
+      { clave: "lugar_id", etiqueta: "Lugar habitual", tipo: "select", opciones: [["", "Sin lugar fijo"], ...E.lugares.filter(l => l.activo).map(l => [l.id, l.nombre])] },
+      { clave: "permisos", etiqueta: "Permisos de este usuario", tipo: "multi", opciones: PERMISOS }], u);
+    if (!v) return;
+    if (u.id === E.perfil.id && (!v.activo || v.rol !== "admin")) throw new Error("No puedes quitarte a ti mismo el acceso de administrador.");
+    ok(await sb.from("perfiles").update({ nombre: v.nombre, activo: v.activo, rol: v.rol, lugar_id: v.lugar_id ? Number(v.lugar_id) : null, permisos: v.permisos }).eq("id", u.id));
+    toast("Guardado", "bien"); ir("usuarios");
+  });
+  pon(m, cab,
+    h("div", { class: "aviso-caja" }, "Las cuentas nuevas se crean en Supabase → Authentication → Add user. Aparecen aquí desactivadas hasta que tú las actives."),
+    h("div", { class: "tarjeta" }, h("div", { class: "lista-simple" }, us.map(u => h("div", { class: "fila toca", onclick: () => editar(u) },
+      h("div", { class: "crece" }, h("strong", {}, u.nombre || "(sin nombre)"), u.id === E.perfil.id ? " (tú)" : "",
+        h("div", { class: "suave" }, (u.rol === "admin" ? "Administrador" : "Trabajador") + (u.lugar_id ? " · " + lugar(u.lugar_id).nombre : "") +
+          (u.rol !== "admin" && (u.permisos || []).length ? " · " + u.permisos.length + " permiso(s)" : ""))),
+      u.activo ? h("span", { class: "chip estado-pendiente" }, "Activo") : h("span", { class: "chip estado-anulado" }, "Inactivo"))))));
+};
+VISTAS.historial = async function (m) {
+  const cab = volverMas("Historial");
+  const [hs, us] = await Promise.all([sb.from("historial").select("*").order("id", { ascending: false }).limit(150), sb.from("perfiles").select("id,nombre")]);
+  const nombres = Object.fromEntries(ok(us).map(u => [u.id, u.nombre]));
+  const TAB = { paquetes: "Paquete", lotes: "Lote", entregas: "Entrega", despachos: "Despacho", despacho_items: "Llegada", fotos: "Foto", lugares: "Lugar", series: "Letra", feriados: "Feriado", ajustes: "Ajuste", perfiles: "Usuario", vendedoras: "Vendedora" };
+  const ACC = { INSERT: "creado", UPDATE: "cambiado", DELETE: "quitado" };
+  const resumen = x => {
+    const d = x.despues || x.antes || {};
+    if (x.tabla === "paquetes") return (d.codigo || "") + (x.accion === "UPDATE" && x.antes && x.antes.estado !== d.estado ? `: ${ESTADOS[x.antes.estado]} → ${ESTADOS[d.estado]}` : "") + (d.motivo ? ` (${d.motivo})` : "");
+    if (x.tabla === "entregas") return `${d.nombre || ""}${d.con_codigo === false ? " · SIN CÓDIGO" : ""}`;
+    return d.nombre || d.letra || d.fecha || d.clave || "";
+  };
+  pon(m, cab, h("p", { class: "suave" }, "Los últimos 150 movimientos."),
+    h("div", { class: "tarjeta" }, h("div", { class: "lista-simple" }, ok(hs).map(x => h("div", {},
+      h("div", {}, h("strong", {}, (TAB[x.tabla] || x.tabla) + " " + (ACC[x.accion] || x.accion)), " ", resumen(x)),
+      h("div", { class: "suave" }, fecha(x.fecha) + " · " + (nombres[x.usuario] || "sistema")))))));
+};
+VISTAS.fotos = async function (m) {
+  const cab = volverMas("Limpiar fotos antiguas");
+  const dias = ajusteNum("dias_borrar_fotos", 15);
+  const corte = new Date(Date.now() - dias * 86400000).toISOString();
+  const buscar = async () => ok(await sb.from("fotos").select("id,ruta,paquetes!inner(estado,cerrado_en)")
+    .is("eliminada_en", null).in("paquetes.estado", ["entregado", "devuelto", "anulado"]).lt("paquetes.cerrado_en", corte).limit(200));
+  const fs = await buscar();
+  const boton = h("button", { class: "btn ancho", id: "fotos-limpiar", disabled: !fs.length }, fs.length ? `Borrar ${fs.length}${fs.length === 200 ? "+" : ""} foto(s)` : "No hay fotos para borrar");
+  boton.addEventListener("click", () => intentar(async () => {
+    let total = 0, lote = fs;
+    while (lote.length) {
+      ok(await sb.storage.from("fotos").remove(lote.map(f => f.ruta)));
+      for (const f of lote) ok(await sb.rpc("marcar_foto_eliminada", { p_foto: f.id }));
+      total += lote.length; lote = await buscar();
+    }
+    toast(`Se borraron ${total} foto(s)`, "bien"); ir("fotos");
+  }, boton));
+  pon(m, cab,
+    h("div", { class: "tarjeta" },
+      h("p", {}, `Se borran las fotos de paquetes entregados, devueltos o anulados hace más de ${dias} días.`),
+      h("p", { class: "suave" }, "El registro del paquete y la firma de entrega no se borran. Las fotos de paquetes pendientes nunca se tocan."),
+      boton));
+};
+VISTAS.respaldo = async function (m) {
+  const cab = volverMas("Descargar respaldo");
+  const estado = h("p", { class: "suave" }, "");
+  const boton = h("button", { class: "btn ancho", id: "respaldo-bajar" }, "Descargar todos los paquetes (CSV)");
+  boton.addEventListener("click", () => intentar(async () => {
+    const cols = ["codigo", "estado", "destino", "ubicacion", "vendedora", "vendedora_tel", "creado_en", "recibio", "cerrado_en", "cerro",
+      "retiro_nombre", "retiro_celular", "retiro_es_titular", "retiro_parentesco", "retiro_con_codigo", "motivo", "cliente_nombre", "cliente_tel", "notas"];
+    let filas = [], desde = 0;
+    for (;;) {
+      const parte = ok(await sb.from("paquetes_detalle").select(cols.join(",")).order("creado_en").range(desde, desde + 999));
+      filas = filas.concat(parte); estado.textContent = `Leyendo… ${filas.length} paquetes`;
+      if (parte.length < 1000) break; desde += 1000;
+    }
+    const celda = v => v === null || v === undefined ? "" : /[",\n;]/.test(String(v)) ? '"' + String(v).replace(/"/g, '""') + '"' : String(v);
+    const csv = "﻿" + [cols.join(","), ...filas.map(f => cols.map(c => celda(f[c])).join(","))].join("\r\n");
+    const a = h("a", { href: URL.createObjectURL(new Blob([csv], { type: "text/csv" })), download: `brinco-respaldo-${new Date().toISOString().slice(0, 10)}.csv` });
+    document.body.append(a); a.click(); a.remove();
+    estado.textContent = `Listo: ${filas.length} paquetes descargados.`;
+  }, boton));
+  pon(m, cab, h("div", { class: "tarjeta" },
+    h("p", {}, "Descarga un archivo con todos los paquetes. Se abre con Excel. Guárdalo una vez por semana en un lugar seguro."), boton, estado));
+};
+
+sb.auth.onAuthStateChange((evento) => { if (evento === "SIGNED_OUT" && E.perfil) { E.perfil = null; pantallaEntrar(); } });
+iniciar();
+</script>
+</body>
+</html>
