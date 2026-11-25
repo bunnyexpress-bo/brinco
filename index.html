@@ -126,7 +126,8 @@ const PERMISOS = [
   ["configurar", "Configurar puntos, letras, feriados y ajustes"],
   ["ver_historial", "Ver el historial"],
   ["limpiar_fotos", "Limpiar fotos antiguas"],
-  ["cambiar_precio", "Cambiar precios (etapa 2)"]
+  ["cambiar_precio", "Hacer descuentos"],
+  ["ver_caja", "Ver la caja de todos los trabajadores"]
 ];
 const PALETA = ["#0B7786", "#0F3D40", "#E9B23C", "#E07A00", "#C0392B", "#D63384", "#8E44AD", "#1F6FEB", "#1E9E5A", "#0E8C8C", "#A0522D", "#6B7280"];
 const DIAS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
@@ -182,6 +183,27 @@ async function intentar(fn, boton) {
   finally { if (boton) boton.disabled = false; }
 }
 const fmtFecha = new Intl.DateTimeFormat("es-BO", { timeZone: "America/La_Paz", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+function bs(n) { n = Number(n) || 0; return "Bs " + (Number.isInteger(n) ? String(n) : n.toFixed(2).replace(".", ",")); }
+function numero(t) { const n = Number(String(t ?? "").replace(",", ".").trim()); return Number.isFinite(n) ? n : NaN; }
+function segmentado(id, opciones, inicial) {
+  let valor = inicial;
+  const botones = opciones.map(([v, t]) => h("button", { type: "button", id: id + "-" + v, class: "btn chico " + (v === inicial ? "" : "sec"), style: "flex:1",
+    onclick: () => { valor = v; botones.forEach((b, i) => { b.className = "btn chico " + (opciones[i][0] === v ? "" : "sec"); }); } }, t));
+  return { nodo: h("div", { class: "fila", role: "group" }, botones.map(b => h("span", { class: "crece", style: "display:flex" }, b))),
+           valor: () => valor, poner: v => { const i = opciones.findIndex(o => o[0] === v); if (i >= 0) botones[i].click(); } };
+}
+const MOMENTOS = { al_dejar: "al dejar", despues: "después", al_recoger: "al recoger", devolucion: "devolución", descuento: "descuento" };
+function lineasCobro(c) {
+  return [
+    h("div", { class: "fila" }, h("span", { class: "crece" }, (c.tamano === "grande" ? "Grande" : "Normal") + " · " + c.origen),
+      h("span", { class: "suave" }, `${bs(c.base)} por ${c.incluidos} días + ${bs(c.extra_dia)}/día`)),
+    h("div", { class: "fila" }, h("span", { class: "crece" }, `${c.dias} día(s) cobrables` + (c.dias_extra ? ` · ${c.dias_extra} extra` : "")),
+      h("span", {}, "Total ", h("strong", {}, bs(c.total)))),
+    h("div", { class: "fila" }, h("span", { class: "crece" }, "Pagado " + bs(c.pagado)),
+      Number(c.falta) > 0 ? h("strong", { style: "color:var(--mal)" }, "Falta " + bs(c.falta)) : h("strong", { style: "color:var(--bien)" }, "Pagado ✓"))];
+}
+const fmtHora = new Intl.DateTimeFormat("es-BO", { timeZone: "America/La_Paz", hour: "2-digit", minute: "2-digit", hour12: false });
+function hora(s) { return s ? fmtHora.format(new Date(s)) : ""; }
 function fecha(s) { return s ? fmtFecha.format(new Date(s)) : ""; }
 function diasDesde(s) { return Math.floor((Date.now() - new Date(s).getTime()) / 86400000); }
 function lugaresDeTrabajo() { return E.lugares.filter(l => l.activo && l.tipo !== "destino"); }
@@ -249,6 +271,10 @@ function formulario(titulo, campos, inicial, textoBoton) {
           onclick: e => { elegido = col; botones.forEach(b => b.classList.toggle("elegido", b === e.currentTarget)); } }));
         ctl[c.clave] = () => elegido;
         nodo = h("div", { class: "campo" }, c.etiqueta, h("div", { class: "paleta" }, botones));
+      } else if (c.tipo === "dinero") {
+        const i = h("input", { type: "text", id: "f-" + c.clave, inputMode: "decimal", placeholder: c.placeholder || "" });
+        i.value = v === null || v === undefined ? "" : String(v).replace(".", ","); ctl[c.clave] = () => i.value.trim();
+        nodo = h("label", { class: "campo" }, c.etiqueta, i);
       } else if (c.tipo === "area") {
         const t = h("textarea", { rows: 3, id: "f-" + c.clave }); t.value = v || ""; ctl[c.clave] = () => t.value.trim();
         nodo = h("label", { class: "campo" }, c.etiqueta, t);
@@ -422,7 +448,7 @@ async function abrirLote(id) {
   ir("recibir");
 }
 async function cargarPaquetesLote() {
-  E.lote.paquetes = ok(await sb.from("paquetes_detalle").select("id,codigo,codigo_retiro,destino_id,estado,num_fotos,creado_en")
+  E.lote.paquetes = ok(await sb.from("paquetes_detalle").select("id,codigo,codigo_retiro,destino_id,estado,num_fotos,creado_en,tamano,cobro")
     .eq("lote_id", E.lote.id).order("creado_en"));
   if (!E.lote.ultimo && E.lote.paquetes.length) E.lote.ultimo = E.lote.paquetes[E.lote.paquetes.length - 1].codigo;
 }
@@ -441,6 +467,7 @@ async function vistaLote(m) {
     else pon(destinoCaja);
   };
   codigo.addEventListener("input", pintarDestino); pintarDestino();
+  const tam = segmentado("tamano", [["normal", "Normal"], ["grande", "Grande"]], "normal");
 
   const foto = h("input", { type: "file", id: "foto", accept: "image/*", capture: "environment", hidden: true });
   const previa = h("img", { class: "vista-previa", hidden: true, alt: "Foto del paquete" });
@@ -454,7 +481,7 @@ async function vistaLote(m) {
   };
   const guardarPaquete = async archivo => {
     const c = validar();
-    const fila = { codigo: c, lote_id: L.id, vendedora_id: L.vendedora.id, ubicacion_id: E.lugarId };
+    const fila = { codigo: c, lote_id: L.id, vendedora_id: L.vendedora.id, ubicacion_id: E.lugarId, tamano: tam.valor() };
     if (!destinoDeCodigo(c)) fila.destino_id = Number(destinoSel.value);
     botonFoto.disabled = guardar.disabled = true; botonFoto.textContent = "Guardando…";
     try {
@@ -488,7 +515,8 @@ async function vistaLote(m) {
       e.target.checked ? marcados.add(p.id) : marcados.delete(p.id); unir.hidden = marcados.size < 2; } });
     return h("label", { class: "fila" }, h("span", { class: "marca-check" }, chk),
       h("div", { class: "crece" }, h("span", { class: "cod" }, p.codigo), " ", chipLugar(p.destino_id),
-        h("div", { class: "suave" }, "Retiro " + p.codigo_retiro + (p.num_fotos ? " · con foto" : " · sin foto"))));
+        h("div", { class: "suave" }, "Retiro " + p.codigo_retiro + (p.tamano === "grande" ? " · Grande" : "") + " · " + bs(p.cobro.total) +
+          (Number(p.cobro.falta) > 0 ? "" : " · pagado") + (p.num_fotos ? " · con foto" : " · sin foto"))));
   }));
 
   pon(m, 
@@ -497,6 +525,7 @@ async function vistaLote(m) {
       h("button", { class: "btn sec chico", onclick: () => { E.lote = null; ir("recibir"); } }, "Salir del lote")),
     h("div", { class: "tarjeta" },
       h("label", { class: "campo" }, "Código de la etiqueta", codigo), destinoCaja,
+      h("div", { class: "campo" }, "Tamaño", tam.nodo),
       foto, botonFoto, previa, guardar),
     L.paquetes.length ? h("div", { class: "tarjeta" },
       h("div", { class: "fila" }, h("h2", { class: "crece" }, "En este lote"), unir),
@@ -516,6 +545,38 @@ function textoAviso(L) {
     `.\n\nMira cada paquete, su código de retiro y dónde está, aquí:\n${enlaceVendedora(L.vendedora)}` +
     `\n\nPase a cada clienta su código de retiro. Sin código no se entrega.`;
 }
+function cajaCobroLote(L, recargar) {
+  const activos = L.paquetes.filter(p => p.estado === "pendiente" || p.estado === "en_camino");
+  const porCobrar = activos.filter(p => Number(p.cobro.falta) > 0), pagados = activos.length - porCobrar.length;
+  if (!activos.length) return null;
+  const elegidos = new Set();
+  const total = h("strong", { id: "lote-total" }, bs(0));
+  const metodo = segmentado("lote-metodo", [["efectivo", "Efectivo"], ["qr", "QR"]], "efectivo");
+  const boton = h("button", { class: "btn ancho", id: "lote-cobrar", disabled: true }, "Cobrar a la vendedora");
+  const checks = porCobrar.map(p => h("input", { type: "checkbox", "aria-label": "Paga " + p.codigo, onchange: e => { e.target.checked ? elegidos.add(p.id) : elegidos.delete(p.id); actualizar(); } }));
+  const actualizar = () => {
+    const t = porCobrar.filter(p => elegidos.has(p.id)).reduce((a, p) => a + Number(p.cobro.falta), 0);
+    total.textContent = bs(t); boton.disabled = !elegidos.size;
+    boton.textContent = elegidos.size ? `Cobrar ${bs(t)} a la vendedora (${elegidos.size})` : "Cobrar a la vendedora";
+  };
+  boton.addEventListener("click", () => intentar(async () => {
+    const r = ok(await sb.rpc("cobrar", { p_ids: [...elegidos], p_metodo: metodo.valor(), p_quien: "vendedora" }));
+    toast(`Cobrado ${bs(r.cobrado)} (${metodo.valor() === "qr" ? "QR" : "efectivo"})`, "bien");
+    await cargarPaquetesLote(); recargar();
+  }, boton));
+  return h("div", { class: "tarjeta", id: "cobro-lote" },
+    h("h2", {}, "¿La vendedora paga algunos ahora?"),
+    h("p", { class: "suave" }, "Marca solo los que paga ahora. Los demás los paga quien recoja." + (pagados ? ` Ya pagados: ${pagados}.` : "")),
+    porCobrar.length ? h("div", { class: "lista-simple" }, porCobrar.map((p, i) => h("label", { class: "fila" },
+      h("span", { class: "marca-check" }, checks[i]), h("span", { class: "cod crece" }, p.codigo),
+      p.tamano === "grande" ? h("span", { class: "chip" }, "Grande") : null, h("strong", {}, bs(p.cobro.falta)))))
+      : h("div", { class: "ok-caja" }, "Todos los paquetes de este lote ya están pagados."),
+    porCobrar.length ? h("div", { class: "fila" },
+      h("button", { class: "btn sec chico", type: "button", onclick: () => { checks.forEach(c => { c.checked = true; }); porCobrar.forEach(p => elegidos.add(p.id)); actualizar(); } }, "Marcar todos"),
+      h("span", { class: "crece", style: "text-align:right" }, "Total ", total)) : null,
+    porCobrar.length ? metodo.nodo : null,
+    porCobrar.length ? boton : null);
+}
 function vistaAviso() {
   const L = E.lote, msg = textoAviso(L), tel = telWhatsapp(L.vendedora.telefono);
   const marcar = () => intentar(async () => { ok(await sb.rpc("marcar_avisado", { p_lote: L.id })); L.avisado = true; });
@@ -525,6 +586,7 @@ function vistaAviso() {
     h("div", { class: "pila", id: "resumen-destinos" }, res.map(([d, n]) =>
       h("div", { class: "destino-grande fila", style: "background:" + lugar(d).color + ";justify-content:space-between" },
         h("span", {}, lugar(d).nombre), h("span", { class: "numero-grande", style: "font-size:26px" }, n)))),
+    cajaCobroLote(L, () => { cerrar(); vistaAviso(); }),
     h("pre", { class: "mensaje", id: "mensaje-aviso" }, msg),
     tel ? h("a", { class: "btn verde ancho", href: `https://wa.me/${tel}?text=${encodeURIComponent(msg)}`, target: "_blank", rel: "noopener", onclick: marcar }, "Abrir WhatsApp con el mensaje")
         : h("div", { class: "aviso-caja" }, "Esta vendedora no tiene celular registrado. Copia el mensaje y envíaselo."),
@@ -588,6 +650,7 @@ async function vistaPaquete(id) {
   const p = await intentar(async () => ok(await sb.from("paquetes_detalle").select("*").eq("id", id).single()));
   if (!p) return;
   const fotos = h("div", { class: "fotos" });
+  const historialCobros = h("div", { class: "lista-simple" });
   const cuerpo = h("div", { class: "pila" });
   const recargar = () => { cerrar(); if (E.pestana === "buscar") document.getElementById("boton-buscar")?.click(); else ir(E.pestana); };
   const accion = (texto, clase, fn) => { const b = h("button", { class: "btn ancho " + clase }, texto); b.addEventListener("click", () => intentar(fn, b)); return b; };
@@ -607,6 +670,7 @@ async function vistaPaquete(id) {
         h("div", { class: p.retiro_con_codigo ? "suave" : "error-caja" }, p.retiro_con_codigo ? "Con código de retiro" : "ENTREGADO SIN CÓDIGO")) : null,
       p.motivo ? h("div", {}, "Motivo: " + p.motivo) : null,
       p.intentos_fallidos >= 5 ? h("div", { class: "error-caja" }, "Bloqueado por 5 códigos incorrectos.") : null),
+    p.cobro ? h("div", { class: "tarjeta", id: "det-cobro" }, h("h2", {}, "Almacenaje"), lineasCobro(p.cobro), historialCobros) : null,
     fotos);
   if (p.estado === "pendiente") {
     cuerpo.append(
@@ -633,9 +697,32 @@ async function vistaPaquete(id) {
           cliente_tel: soloDigitos(v.cliente_tel) || null, notas: v.notas || null }).eq("id", p.id));
         toast("Guardado", "bien"); recargar();
       }),
+      Number(p.cobro.falta) > 0 ? accion("Cobrar ahora " + bs(p.cobro.falta), "sec", async () => {
+        const v = await formulario("Cobrar " + bs(p.cobro.falta) + " de " + p.codigo, [
+          { clave: "quien", etiqueta: "¿Quién paga?", tipo: "select", opciones: [["vendedora", "La vendedora"], ["recoge", "Quien recoge"]], defecto: "vendedora" },
+          { clave: "metodo", etiqueta: "¿Cómo paga?", tipo: "select", opciones: [["efectivo", "Efectivo"], ["qr", "QR"]], defecto: "efectivo" }], null, "Cobrar " + bs(p.cobro.falta));
+        if (!v) return;
+        const r = ok(await sb.rpc("cobrar", { p_ids: [p.id], p_metodo: v.metodo, p_quien: v.quien }));
+        toast("Cobrado " + bs(r.cobrado), "bien"); recargar();
+      }) : null,
+      Number(p.cobro.falta) > 0 && puede("cambiar_precio") ? accion("Descuento", "sec", async () => {
+        const v = await formulario("Descuento en " + p.codigo, [
+          { clave: "monto", etiqueta: "Monto a descontar (falta " + bs(p.cobro.falta) + ")", tipo: "dinero", obligatorio: true },
+          { clave: "motivo", etiqueta: "Motivo", obligatorio: true }], null, "Aplicar descuento");
+        if (!v) return;
+        const n = numero(v.monto); if (!(n > 0)) throw new Error("Escribe un monto válido, por ejemplo 1 o 1,50.");
+        ok(await sb.rpc("descontar", { p_id: p.id, p_monto: n, p_motivo: v.motivo })); toast("Descuento aplicado", "bien"); recargar();
+      }) : null,
+      Number(p.cobro.pagado) === 0 ? accion("Cambiar a " + (p.tamano === "grande" ? "Normal" : "Grande"), "sec", async () => {
+        ok(await sb.from("paquetes").update({ tamano: p.tamano === "grande" ? "normal" : "grande" }).eq("id", p.id));
+        toast("Tamaño cambiado", "bien"); recargar();
+      }) : null,
       accion("Devolver a la vendedora", "sec", async () => {
-        const v = await formulario("Devolver " + p.codigo, [{ clave: "motivo", etiqueta: "Motivo de la devolución", obligatorio: true }], null, "Devolver");
-        if (!v) return; ok(await sb.rpc("devolver_paquetes", { p_ids: [p.id], p_motivo: v.motivo })); toast("Devuelto a la vendedora", "bien"); recargar();
+        const falta = Number(p.cobro.falta);
+        const v = await formulario("Devolver " + p.codigo, [{ clave: "motivo", etiqueta: "Motivo de la devolución", obligatorio: true },
+          ...(falta > 0 ? [{ clave: "metodo", etiqueta: `La vendedora paga ${bs(falta)} de almacenaje`, tipo: "select", opciones: [["efectivo", "Efectivo"], ["qr", "QR"]], defecto: "efectivo" }] : [])],
+          null, "Devolver");
+        if (!v) return; ok(await sb.rpc("devolver_paquetes", { p_ids: [p.id], p_motivo: v.motivo, p_metodo: v.metodo || null })); toast("Devuelto a la vendedora", "bien"); recargar();
       }));
     if (puede("anular")) cuerpo.append(accion("Anular (registro por error)", "rojo", async () => {
       const v = await formulario("Anular " + p.codigo, [{ clave: "motivo", etiqueta: "Motivo de la anulación", obligatorio: true }], null, "Anular");
@@ -651,6 +738,9 @@ async function vistaPaquete(id) {
     }));
   }
   const cerrar = hoja("Paquete " + p.codigo, cuerpo);
+  sb.rpc("cobro_paquetes", { p_ids: [id] }).then(r => { if (r.data) pon(historialCobros, r.data.cobros.map(c => h("div", { class: "fila" },
+    h("span", { class: "crece suave" }, `${fecha(c.fecha)} · ${MOMENTOS[c.momento] || c.momento}` + (c.pagado_por ? ` · pagó ${c.pagado_por === "vendedora" ? "la vendedora" : "quien recoge"}` : "") + (c.motivo ? ` · ${c.motivo}` : "") + ` · ${c.cobro || ""}`),
+    h("strong", {}, bs(c.monto) + " " + (c.metodo === "qr" ? "QR" : c.metodo === "descuento" ? "desc." : "efect."))))); });
   const fs = await sb.from("fotos").select("ruta").eq("paquete_id", id).is("eliminada_en", null);
   for (const f of fs.data || []) { const u = await urlFirmada("fotos", f.ruta); if (u) fotos.append(h("img", { src: u, alt: "Foto de " + p.codigo })); }
   if (p.retiro_firma) { const u = await urlFirmada("firmas", p.retiro_firma); if (u) fotos.append(h("img", { src: u, alt: "Firma de quien recogió" })); }
@@ -683,6 +773,21 @@ function vistaEntregar(paquetes, codigoPrevio) {
   const cajaSin = h("div", { class: "pila", hidden: true }, h("label", { class: "campo" }, "Número de carnet", carnet), h("label", { class: "campo" }, "Motivo", motivo));
   sinCodigo.addEventListener("change", () => { cajaSin.hidden = !sinCodigo.checked; codigo.disabled = sinCodigo.checked; });
   const F = lienzoFirma();
+  const metodo = segmentado("ent-metodo", [["efectivo", "Efectivo"], ["qr", "QR"]], "efectivo");
+  let falta = 0;
+  const cajaCobro = h("div", { class: "tarjeta", id: "ent-cobro" }, h("p", { class: "suave" }, "Calculando el cobro…"));
+  (async () => {
+    try {
+      const c = ok(await sb.rpc("cobro_paquetes", { p_ids: paquetes.map(p => p.id) }));
+      falta = Number(c.falta);
+      pon(cajaCobro,
+        falta > 0 ? h("div", { class: "fila" }, h("span", { class: "crece", style: "font-weight:700" }, "A cobrar"), h("span", { class: "numero-grande", id: "ent-falta" }, bs(falta)))
+                  : h("div", { class: "ok-caja", id: "ent-falta" }, "Nada por cobrar: ya está pagado."),
+        c.paquetes.map(x => h("div", { class: "suave" }, `${x.codigo}: ${x.dias} día(s)` + (x.dias_extra ? ` (${x.dias_extra} extra)` : "") +
+          ` · total ${bs(x.total)} · pagado ${bs(x.pagado)}`)),
+        falta > 0 ? metodo.nodo : null);
+    } catch (e) { pon(cajaCobro, h("div", { class: "error-caja" }, traducir(e.message))); }
+  })();
   const err = h("div", { class: "error-caja", id: "ent-error", hidden: true });
   const boton = h("button", { class: "btn verde ancho", id: "ent-confirmar" }, `Entregar ${paquetes.length} paquete(s)`);
   boton.addEventListener("click", async () => {
@@ -703,9 +808,9 @@ function vistaEntregar(paquetes, codigoPrevio) {
         p_ids: paquetes.map(p => p.id), p_codigo: sin || !pide ? (pide ? null : (cod || null)) : cod,
         p_nombre: nombre.value.trim(), p_celular: soloDigitos(celular.value), p_es_titular: titular.value === "si",
         p_parentesco: titular.value === "no" ? parentesco.value.trim() : null, p_firma: ruta,
-        p_carnet: sin ? carnet.value.trim() : null, p_motivo: sin ? motivo.value.trim() : null }));
-      if (!r.ok) { falla(r.mensaje + " Quedan pocos intentos antes de que se bloquee."); return; }
-      cerrar(); toast(`Entregado: ${paquetes.map(p => p.codigo).join(", ")}`, "bien"); ir("buscar");
+        p_carnet: sin ? carnet.value.trim() : null, p_motivo: sin ? motivo.value.trim() : null, p_metodo: metodo.valor() }));
+      if (!r.ok) { falla(r.cobrar ? r.mensaje : r.mensaje + " Quedan pocos intentos antes de que se bloquee."); return; }
+      cerrar(); toast(`Entregado: ${paquetes.map(p => p.codigo).join(", ")}` + (Number(r.cobrado) > 0 ? ` · cobrado ${bs(r.cobrado)}` : ""), "bien"); ir("buscar");
     } catch (e) { falla(traducir(e.message)); }
     finally { boton.disabled = false; }
   });
@@ -717,7 +822,7 @@ function vistaEntregar(paquetes, codigoPrevio) {
     h("label", { class: "campo" }, "Celular de quien recoge", celular),
     h("label", { class: "campo" }, "¿Es la titular del paquete?", titular), cajaParentesco,
     h("div", { class: "campo" }, h("div", { class: "fila" }, h("span", { class: "crece" }, "Firma con el dedo"), h("button", { class: "btn sec chico", type: "button", onclick: F.limpiar }, "Borrar firma")), F.lienzo),
-    err, boton);
+    cajaCobro, err, boton);
   const cerrar = hoja("Entregar", cuerpo);
 }
 
@@ -828,7 +933,9 @@ VISTAS.mas = async function (m) {
   pon(m, h("h1", {}, "Más"),
     h("p", { class: "suave" }, E.perfil.nombre + " · " + (E.perfil.rol === "admin" ? "Administrador" : "Trabajador")),
     op("mas-resumen", "Resumen de paquetes", "Cuántos hay en cada lugar y cuáles llevan más días", "resumen"),
+    op("mas-caja", "Caja", puede("ver_caja") ? "Lo cobrado por día y por trabajador" : "Lo que cobraste hoy, en efectivo y QR", "caja"),
     op("mas-vendedoras", "Vendedoras", "Su enlace para ver sus paquetes y códigos de retiro", "vendedoras"),
+    puede("configurar") ? op("mas-precios", "Precios y promociones", "Tarifas, precios especiales por vendedora y promociones", "precios") : null,
     puede("configurar") ? op("mas-config", "Configuración", "Puntos de entrega, letras, días, feriados y ajustes", "config") : null,
     E.perfil.rol === "admin" ? op("mas-usuarios", "Usuarios y permisos", "Activar trabajadores y decidir qué puede hacer cada uno", "usuarios") : null,
     puede("ver_historial") ? op("mas-historial", "Historial", "Quién hizo qué y cuándo", "historial") : null,
@@ -840,6 +947,121 @@ function volverMas(titulo) {
   E.pestana = "mas"; document.getElementById("tab-mas").classList.add("activa");
   return h("div", { class: "fila" }, h("h1", { class: "crece" }, titulo), h("button", { class: "btn sec chico", onclick: () => ir("mas") }, "Volver"));
 }
+VISTAS.caja = async function (m) {
+  const cab = volverMas("Caja");
+  const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/La_Paz" });
+  const dia = h("input", { type: "date", id: "caja-dia", value: hoy, max: hoy });
+  const cont = h("div", { class: "pila", id: "caja-contenido" });
+  const pintar = () => intentar(async () => {
+    const cs = ok(await sb.from("cobros_detalle").select("*").eq("dia", dia.value).order("creado_en", { ascending: false }).limit(2000));
+    const suma = f => cs.filter(f).reduce((a, c) => a + Number(c.monto), 0);
+    const ef = suma(c => c.metodo === "efectivo"), qr = suma(c => c.metodo === "qr"), de = suma(c => c.metodo === "descuento");
+    const porTrab = new Map();
+    for (const c of cs) if (c.metodo !== "descuento") { const t = porTrab.get(c.cobro_por) || { ef: 0, qr: 0 }; t[c.metodo === "qr" ? "qr" : "ef"] += Number(c.monto); porTrab.set(c.cobro_por, t); }
+    pon(cont,
+      h("div", { class: "rejilla2" },
+        h("div", { class: "tarjeta" }, h("span", { class: "suave" }, "Efectivo"), h("span", { class: "numero-grande", id: "caja-efectivo" }, bs(ef))),
+        h("div", { class: "tarjeta" }, h("span", { class: "suave" }, "QR"), h("span", { class: "numero-grande", id: "caja-qr" }, bs(qr)))),
+      h("div", { class: "tarjeta fila" }, h("span", { class: "crece" }, "Total cobrado"), h("strong", { id: "caja-total" }, bs(ef + qr)),
+        de ? h("span", { class: "suave", style: "width:100%" }, "Descuentos dados: " + bs(de)) : null),
+      porTrab.size > 1 || puede("ver_caja") ? h("div", { class: "tarjeta" }, h("h2", {}, "Por trabajador"),
+        h("div", { class: "lista-simple" }, [...porTrab.entries()].map(([n, t]) => h("div", { class: "fila" }, h("strong", { class: "crece" }, n || "?"),
+          h("span", {}, "Efectivo " + bs(t.ef) + " · QR " + bs(t.qr)))))) : null,
+      h("div", { class: "tarjeta" }, h("h2", {}, "Cobros del día"),
+        cs.length ? h("div", { class: "lista-simple" }, cs.map(c => h("div", { class: "fila" },
+          h("div", { class: "crece" }, h("strong", {}, c.codigo), " · " + c.vendedora,
+            h("div", { class: "suave" }, hora(c.creado_en) + " · " + (MOMENTOS[c.momento] || c.momento) + " · " + (c.cobro_por || "") + (c.motivo ? " · " + c.motivo : ""))),
+          h("strong", {}, bs(c.monto) + " " + (c.metodo === "qr" ? "QR" : c.metodo === "descuento" ? "desc." : "efect.")))))
+          : h("p", { class: "suave" }, "No hay cobros este día.")));
+  });
+  dia.addEventListener("change", pintar);
+  pon(m, cab, puede("ver_caja") ? null : h("p", { class: "suave" }, "Ves solo lo que cobraste tú."), h("label", { class: "campo" }, "Día", dia), cont);
+  await pintar();
+};
+VISTAS.precios = async function (m) {
+  const cab = volverMas("Precios y promociones");
+  await cargarBase();
+  const [esp, pro, vs] = await Promise.all([
+    sb.from("precios_especiales").select("*, vendedoras(nombre)").order("creado_en"),
+    sb.from("promociones").select("*, vendedoras(nombre)").order("desde", { ascending: false }),
+    sb.from("vendedoras").select("id,nombre").order("nombre").limit(1000)]);
+  const especiales = ok(esp), promos = ok(pro), vendedoras = ok(vs);
+  const A = clave => E.ajustes[clave];
+  const TIPOS = [["descuento_bs", "Descuento en Bs"], ["porcentaje", "Descuento en %"], ["precio_fijo", "Precio fijo"], ["dias_gratis", "Días gratis extra"]];
+  const textoPromo = p => ({ descuento_bs: `− ${bs(p.valor)}`, porcentaje: `− ${p.valor}%`, precio_fijo: `precio ${bs(p.valor)}`, dias_gratis: `+${p.valor} días gratis` })[p.tipo];
+  const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/La_Paz" });
+  const opVend = [["", "Todas las vendedoras"], ...vendedoras.map(v => [v.id, v.nombre])];
+  const numOVacio = (t, etiqueta) => { if (String(t ?? "").trim() === "") return null; const n = numero(t); if (!(n >= 0)) throw new Error(etiqueta + ": escribe un número, por ejemplo 2 o 1,50."); return n; };
+
+  const editarTarifas = () => intentar(async () => {
+    const v = await formulario("Tarifa general", [
+      { clave: "tarifa_normal", etiqueta: "Paquete normal: precio de los primeros días (Bs)", tipo: "dinero", obligatorio: true },
+      { clave: "tarifa_grande", etiqueta: "Paquete grande: precio de los primeros días (Bs)", tipo: "dinero", obligatorio: true },
+      { clave: "dias_incluidos", etiqueta: "Días incluidos en ese precio", tipo: "number", obligatorio: true },
+      { clave: "tarifa_dia_extra", etiqueta: "Cada día extra (Bs)", tipo: "dinero", obligatorio: true },
+      { clave: "cobrar_domingos", etiqueta: "Contar los domingos", tipo: "check" },
+      { clave: "cobrar_feriados", etiqueta: "Contar los feriados", tipo: "check" }],
+      { ...E.ajustes, cobrar_domingos: A("cobrar_domingos") === true, cobrar_feriados: A("cobrar_feriados") === true }, "Guardar tarifa");
+    if (!v) return;
+    for (const k of ["tarifa_normal", "tarifa_grande", "tarifa_dia_extra"]) { const n = numOVacio(v[k], "Precio"); if (n === null) throw new Error("Falta un precio."); v[k] = n; }
+    v.dias_incluidos = Number(v.dias_incluidos); if (!Number.isInteger(v.dias_incluidos) || v.dias_incluidos < 0) throw new Error("Los días incluidos deben ser un número entero.");
+    for (const k of Object.keys(v)) if (JSON.stringify(v[k]) !== JSON.stringify(A(k))) ok(await sb.from("ajustes").update({ valor: v[k] }).eq("clave", k));
+    toast("Tarifa guardada. Se aplica a los paquetes que entren desde ahora.", "bien"); ir("precios");
+  });
+  const editarEspecial = e => intentar(async () => {
+    const v = await formulario(e ? "Precio especial de " + e.vendedoras.nombre : "Nuevo precio especial", [
+      ...(e ? [] : [{ clave: "vendedora_id", etiqueta: "Vendedora", tipo: "select", opciones: [["", "Elige…"], ...vendedoras.filter(x => !especiales.some(s => s.vendedora_id === x.id)).map(x => [x.id, x.nombre])], obligatorio: true }]),
+      { clave: "base_normal", etiqueta: "Normal: precio de los primeros días (vacío = general)", tipo: "dinero" },
+      { clave: "base_grande", etiqueta: "Grande: precio de los primeros días (vacío = general)", tipo: "dinero" },
+      { clave: "extra_dia", etiqueta: "Cada día extra (vacío = general)", tipo: "dinero" },
+      { clave: "notas", etiqueta: "Notas (opcional)" },
+      { clave: "activo", etiqueta: "Activo", tipo: "check", defecto: true }], e, "Guardar");
+    if (!v) return;
+    const fila = { base_normal: numOVacio(v.base_normal, "Normal"), base_grande: numOVacio(v.base_grande, "Grande"), extra_dia: numOVacio(v.extra_dia, "Día extra"), notas: v.notas || null, activo: v.activo };
+    ok(e ? await sb.from("precios_especiales").update(fila).eq("id", e.id) : await sb.from("precios_especiales").insert({ ...fila, vendedora_id: v.vendedora_id }));
+    toast("Precio especial guardado", "bien"); ir("precios");
+  });
+  const editarPromo = p => intentar(async () => {
+    const v = await formulario(p ? "Promoción " + p.nombre : "Nueva promoción", [
+      { clave: "nombre", etiqueta: "Nombre", obligatorio: true, placeholder: "Promo Navidad" },
+      { clave: "desde", etiqueta: "Desde", tipo: "date", obligatorio: true, defecto: hoy },
+      { clave: "hasta", etiqueta: "Hasta", tipo: "date", obligatorio: true, defecto: hoy },
+      { clave: "tipo", etiqueta: "Tipo", tipo: "select", opciones: TIPOS, defecto: "descuento_bs" },
+      { clave: "valor", etiqueta: "Valor (Bs, % o días según el tipo)", tipo: "dinero", obligatorio: true },
+      { clave: "tamano", etiqueta: "Para", tipo: "select", opciones: [["", "Todos los tamaños"], ["normal", "Solo normales"], ["grande", "Solo grandes"]] },
+      { clave: "vendedora_id", etiqueta: "Vendedora", tipo: "select", opciones: opVend },
+      { clave: "activo", etiqueta: "Activa", tipo: "check", defecto: true }], p, "Guardar");
+    if (!v) return;
+    if (v.hasta < v.desde) throw new Error("La fecha 'hasta' debe ser igual o posterior a 'desde'.");
+    const fila = { nombre: v.nombre, desde: v.desde, hasta: v.hasta, tipo: v.tipo, valor: numOVacio(v.valor, "Valor"), tamano: v.tamano || null, vendedora_id: v.vendedora_id || null, activo: v.activo };
+    if (fila.tipo === "porcentaje" && fila.valor > 100) throw new Error("El porcentaje no puede pasar de 100.");
+    ok(p ? await sb.from("promociones").update(fila).eq("id", p.id) : await sb.from("promociones").insert(fila));
+    toast("Promoción guardada", "bien"); ir("precios");
+  });
+  const vigente = p => p.activo && p.desde <= hoy && hoy <= p.hasta;
+  pon(m, cab,
+    h("div", { class: "aviso-caja" }, "Cada paquete guarda el precio con el que entró. Si hay precio especial y promoción, se aplica el más barato; no se suman."),
+    h("div", { class: "tarjeta", id: "precios-general" }, h("div", { class: "fila" }, h("h2", { class: "crece" }, "Tarifa general"), h("button", { class: "btn chico", id: "precios-tarifa", onclick: editarTarifas }, "Cambiar")),
+      h("div", { class: "lista-simple" },
+        h("div", { class: "fila" }, h("span", { class: "crece" }, "Normal"), h("strong", {}, `${bs(A("tarifa_normal"))} por ${A("dias_incluidos")} días`)),
+        h("div", { class: "fila" }, h("span", { class: "crece" }, "Grande"), h("strong", {}, `${bs(A("tarifa_grande"))} por ${A("dias_incluidos")} días`)),
+        h("div", { class: "fila" }, h("span", { class: "crece" }, "Cada día extra"), h("strong", {}, bs(A("tarifa_dia_extra")))),
+        h("div", { class: "fila" }, h("span", { class: "crece" }, "Domingos y feriados"), h("strong", {},
+          (A("cobrar_domingos") === true ? "se cuentan domingos" : "no se cuentan domingos") + " · " + (A("cobrar_feriados") === true ? "se cuentan feriados" : "no se cuentan feriados"))))),
+    h("div", { class: "tarjeta" }, h("div", { class: "fila" }, h("h2", { class: "crece" }, "Precios especiales"), h("button", { class: "btn chico", id: "precios-nuevo-especial", onclick: () => editarEspecial(null) }, "+ Agregar")),
+      especiales.length ? h("div", { class: "lista-simple" }, especiales.map(e => h("div", { class: "fila toca", onclick: () => editarEspecial(e) },
+        h("div", { class: "crece" }, h("strong", {}, e.vendedoras.nombre), e.activo ? null : h("span", { class: "chip estado-anulado" }, "Inactivo"),
+          h("div", { class: "suave" }, `Normal ${e.base_normal ?? "general"} · Grande ${e.base_grande ?? "general"} · día extra ${e.extra_dia ?? "general"}` + (e.notas ? " · " + e.notas : ""))),
+        h("span", { class: "btn sec chico" }, "Editar"))))
+        : h("p", { class: "suave" }, "Ninguna vendedora tiene precio especial.")),
+    h("div", { class: "tarjeta" }, h("div", { class: "fila" }, h("h2", { class: "crece" }, "Promociones"), h("button", { class: "btn chico", id: "precios-nueva-promo", onclick: () => editarPromo(null) }, "+ Nueva")),
+      promos.length ? h("div", { class: "lista-simple" }, promos.map(p => h("div", { class: "fila toca", onclick: () => editarPromo(p) },
+        h("div", { class: "crece" }, h("strong", {}, p.nombre), " ", vigente(p) ? h("span", { class: "chip estado-pendiente" }, "Vigente") : h("span", { class: "chip" }, p.activo ? "Fuera de fecha" : "Inactiva"),
+          h("div", { class: "suave" }, `${textoPromo(p)} · ${p.desde.split("-").reverse().join("/")} al ${p.hasta.split("-").reverse().join("/")}` +
+            (p.tamano ? ` · solo ${p.tamano === "grande" ? "grandes" : "normales"}` : "") + (p.vendedoras ? " · " + p.vendedoras.nombre : ""))),
+        h("span", { class: "btn sec chico" }, "Editar"))))
+        : h("p", { class: "suave" }, "No hay promociones.")));
+};
 VISTAS.vendedoras = async function (m) {
   const cab = volverMas("Vendedoras");
   const q = h("input", { type: "text", id: "buscar-vendedora", placeholder: "Buscar por nombre o celular", autocomplete: "off" });
@@ -1075,6 +1297,7 @@ async function paginaVendedora(enlace) {
       p.motivo ? h("div", { class: "suave" }, "Motivo: " + p.motivo) : null,
       p.fotos.length ? h("div", { class: "fotos" }, p.fotos.map(r => h("a", { href: urlFoto(r), target: "_blank", rel: "noopener" }, h("img", { src: urlFoto(r), alt: "Foto de " + p.codigo, loading: "lazy" })))) : null,
       p.retiro ? h("div", { class: "ok-caja fila", style: "justify-content:space-between" }, h("span", {}, "Código de retiro"), h("span", { class: "cod" }, p.retiro)) : null,
+      p.retiro ? h("div", { class: "suave" }, Number(p.por_cobrar) > 0 ? "Almacenaje a pagar al recoger: " + bs(p.por_cobrar) : "Almacenaje pagado ✓") : null,
       p.retiro ? h("div", { class: "fila" },
         h("a", { class: "btn verde chico crece", href: "https://wa.me/?text=" + encodeURIComponent(msgClienta), target: "_blank", rel: "noopener" }, "Enviar a mi clienta"),
         h("button", { class: "btn sec chico", onclick: () => copiar(msgClienta, "Mensaje copiado") }, "Copiar")) : null);
@@ -1112,6 +1335,8 @@ function paginaConsulta(inicial) {
       h("div", { class: "fila" }, h("span", { class: "cod crece" }, p.codigo), chipSituacion(p.situacion)),
       h("div", { class: "destino-grande", style: "background:" + p.color }, "→ " + p.destino),
       h("div", { style: "font-size:18px;font-weight:700" }, p.situacion.texto),
+      p.por_cobrar !== null && p.por_cobrar !== undefined ? h("div", { class: Number(p.por_cobrar) > 0 ? "aviso-caja" : "ok-caja" },
+        Number(p.por_cobrar) > 0 ? "Almacenaje a pagar al recoger: " + bs(p.por_cobrar) + " (efectivo o QR)" : "Almacenaje pagado ✓") : null,
       p.situacion.clave === "listo" ? h("p", { class: "suave" }, "Presenta este código de retiro al recoger. Si mandas a otra persona, dale el código.") : null))
       : [h("div", { class: "aviso-caja" }, "No encontramos paquetes con ese código. Revisa el número o pregunta a tu vendedora.")]));
   }, boton);
