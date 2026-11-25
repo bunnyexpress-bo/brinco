@@ -299,7 +299,7 @@ async function iniciar() {
   const { data } = await sb.auth.getSession();
   E.sesion = data.session;
   if (!E.sesion) return pantallaEntrar();
-  $app.replaceChildren(h("div", { class: "centro" }, h("p", { class: "suave" }, "Cargando…")));
+  pon($app, h("div", { class: "centro" }, h("p", { class: "suave" }, "Cargando…")));
   try {
     E.perfil = ok(await sb.from("perfiles").select("*").eq("id", E.sesion.user.id).maybeSingle());
     if (!E.perfil || !E.perfil.activo) return pantallaInactivo();
@@ -322,18 +322,18 @@ function pantallaEntrar() {
     if (r.error) { err.textContent = traducir(r.error.message); err.hidden = false; return; }
     iniciar();
   } }, h("label", { class: "campo" }, "Correo", correo), h("label", { class: "campo" }, "Contraseña", clave), err, boton);
-  $app.replaceChildren(h("div", { class: "portada" }, h("div", { class: "centro" },
+  pon($app, h("div", { class: "portada" }, h("div", { class: "centro" },
     h("div", { class: "logo" }, "Brin", h("span", {}, "co")),
     h("p", { class: "lema" }, "por Bunny Express · Tu paquete da el siguiente salto"), f)));
 }
 function pantallaInactivo() {
-  $app.replaceChildren(h("div", { class: "centro" },
+  pon($app, h("div", { class: "centro" },
     h("div", { class: "logo" }, "Brin", h("span", {}, "co")),
     h("div", { class: "aviso-caja" }, "Tu usuario todavía no está activado. Pide al administrador que lo active."),
     h("button", { class: "btn sec", onclick: salir }, "Cerrar sesión")));
 }
 function pantallaError(e) {
-  $app.replaceChildren(h("div", { class: "centro" },
+  pon($app, h("div", { class: "centro" },
     h("div", { class: "error-caja" }, "No se pudo cargar: " + traducir(e.message)),
     h("button", { class: "btn", onclick: iniciar }, "Reintentar"),
     h("button", { class: "btn sec", onclick: salir }, "Cerrar sesión")));
@@ -347,7 +347,7 @@ function marco() {
   } }, lugaresDeTrabajo().map(l => h("option", { value: String(l.id) }, "📍 " + l.nombre)));
   selector.value = String(E.lugarId);
   const tabs = [["recibir", "Recibir"], ["buscar", "Buscar y entregar"], ["despacho", "Despacho"], ["mas", "Más"]];
-  $app.replaceChildren(
+  pon($app, 
     h("header", { class: "barra" }, h("span", { class: "marca" }, "Brinco"), selector),
     h("main", { id: "principal" }),
     h("nav", { class: "pestanas" }, h("div", { class: "dentro" },
@@ -376,12 +376,12 @@ VISTAS.recibir = async function (m) {
   let t = null;
   const buscar = async () => {
     const q = busca.value.trim().replace(/[,()"%*]/g, "");
-    if (q.length < 2) { res.replaceChildren(); return; }
+    if (q.length < 2) { pon(res); return; }
     const d = soloDigitos(q);
     const filtro = d.length >= 3 && d.length === q.length ? `telefono.like.*${d}*` : `nombre.ilike.*${q}*`;
     const vs = await intentar(async () => ok(await sb.from("vendedoras").select("*").or(filtro).order("nombre").limit(8)));
     if (!vs) return;
-    res.replaceChildren(
+    pon(res, 
       ...vs.map(v => h("div", { class: "fila toca", onclick: () => empezarLote(v) },
         h("div", { class: "crece" }, h("strong", {}, v.nombre), h("div", { class: "suave" }, v.telefono || "sin celular")),
         h("span", { class: "btn sec chico" }, "Elegir"))),
@@ -436,9 +436,9 @@ async function vistaLote(m) {
     E.lugares.filter(l => l.activo).map(l => h("option", { value: String(l.id) }, l.nombre)));
   const pintarDestino = () => {
     const c = limpiarCodigo(codigo.value), d = destinoDeCodigo(c);
-    if (d) destinoCaja.replaceChildren(h("div", { class: "destino-grande", style: "background:" + lugar(d).color }, "→ " + lugar(d).nombre));
-    else if (/^[A-Z]+/.test(c)) destinoCaja.replaceChildren(h("div", { class: "aviso-caja" }, "Esa letra no tiene destino configurado. Elígelo:"), destinoSel);
-    else destinoCaja.replaceChildren();
+    if (d) pon(destinoCaja, h("div", { class: "destino-grande", style: "background:" + lugar(d).color }, "→ " + lugar(d).nombre));
+    else if (/^[A-Z]+/.test(c)) pon(destinoCaja, h("div", { class: "aviso-caja" }, "Esa letra no tiene destino configurado. Elígelo:"), destinoSel);
+    else pon(destinoCaja);
   };
   codigo.addEventListener("input", pintarDestino); pintarDestino();
 
@@ -543,7 +543,7 @@ VISTAS.buscar = async function (m, inicial) {
   const res = h("div", { class: "pila" });
   const buscar = () => intentar(async () => {
     const texto = q.value.trim().replace(/[,()"%*]/g, "");
-    if (texto.length < 2) { res.replaceChildren(h("p", { class: "suave" }, "Escribe al menos 2 caracteres.")); return; }
+    if (texto.length < 2) { pon(res, h("p", { class: "suave" }, "Escribe al menos 2 caracteres.")); return; }
     const d = soloDigitos(texto), cod = limpiarCodigo(texto);
     let filtros;
     if (d.length === texto.length) {
@@ -571,7 +571,7 @@ function tarjetaPaquete(p) {
     h("div", { class: "suave" }, p.vendedora + " · ingresó " + fecha(p.creado_en) + " · " + diasDesde(p.creado_en) + " día(s)"));
 }
 function pintarResultados(res, ps, retiro) {
-  if (!ps.length) { res.replaceChildren(h("div", { class: "aviso-caja" }, "No se encontró ningún paquete.")); return; }
+  if (!ps.length) { pon(res, h("div", { class: "aviso-caja" }, "No se encontró ningún paquete.")); return; }
   const nodos = [];
   if (retiro) {
     const delCodigo = ps.filter(p => p.codigo_retiro === retiro && p.estado === "pendiente");
@@ -582,7 +582,7 @@ function pintarResultados(res, ps, retiro) {
     else if (delCodigo.length) nodos.push(h("div", { class: "aviso-caja" }, "El código es válido, pero el paquete no está en " + lugar(E.lugarId).nombre + ". Mira dónde está:"));
   }
   nodos.push(...ps.map(tarjetaPaquete));
-  res.replaceChildren(...nodos);
+  pon(res, ...nodos);
 }
 async function vistaPaquete(id) {
   const p = await intentar(async () => ok(await sb.from("paquetes_detalle").select("*").eq("id", id).single()));
@@ -759,7 +759,7 @@ VISTAS.despacho_nuevo = async function (m) {
     const visibles = !dest ? [] : (soloDestino.checked ? ps.filter(p => p.destino_id === dest) : ps);
     visibles.forEach(p => elegidos.add(p.id));
     const actualizar = () => { boton.disabled = !elegidos.size; boton.textContent = elegidos.size ? `Despachar ${elegidos.size} paquete(s)` : "Despachar"; };
-    lista.replaceChildren(...(dest ? (visibles.length ? visibles.map(p => h("label", { class: "fila" },
+    pon(lista, ...(dest ? (visibles.length ? visibles.map(p => h("label", { class: "fila" },
       h("span", { class: "marca-check" }, h("input", { type: "checkbox", checked: true, onchange: e => { e.target.checked ? elegidos.add(p.id) : elegidos.delete(p.id); actualizar(); } })),
       h("div", { class: "crece" }, h("span", { class: "cod" }, p.codigo), " ", chipLugar(p.destino_id), h("div", { class: "suave" }, p.vendedora + " · " + diasDesde(p.creado_en) + " día(s)"))))
       : [h("p", { class: "suave" }, "No hay paquetes pendientes aquí para ese destino.")]) : [h("p", { class: "suave" }, "Elige el destino para ver los paquetes.")]));
@@ -849,7 +849,7 @@ VISTAS.vendedoras = async function (m) {
     let cons = sb.from("vendedoras").select("*").order("nombre").limit(100);
     if (t) cons = cons.or(d && d.length === t.length ? `telefono.like.*${d}*` : `nombre.ilike.*${t}*`);
     const vs = ok(await cons);
-    lista.replaceChildren(...(vs.length ? vs.map(v => h("div", { class: "pila", style: "gap:8px" },
+    pon(lista, ...(vs.length ? vs.map(v => h("div", { class: "pila", style: "gap:8px" },
       h("div", {}, h("strong", {}, v.nombre), h("div", { class: "suave" }, v.telefono || "sin celular")),
       h("div", { class: "fila" },
         h("button", { class: "btn sec chico", onclick: () => copiar(enlaceVendedora(v), "Enlace copiado") }, "Copiar enlace"),
@@ -1052,7 +1052,7 @@ const SITUACION = { listo: ["estado-pendiente", "Listo para recoger"], camino: [
 function chipSituacion(s) { const [c, t] = SITUACION[s.clave] || ["", s.clave]; return h("span", { class: "chip " + c }, t); }
 function urlFoto(ruta) { return `${CONFIG.url}/storage/v1/object/public/fotos/${ruta.split("/").map(encodeURIComponent).join("/")}`; }
 function marcoPublico(subtitulo, ...contenido) {
-  $app.replaceChildren(
+  pon($app, 
     h("header", { class: "barra" }, h("span", { class: "marca" }, "Brinco"), h("span", { style: "margin-left:auto;font-size:14px;opacity:.9" }, subtitulo)),
     h("main", { id: "principal", style: "padding-bottom:32px" }, ...contenido));
 }
@@ -1083,7 +1083,7 @@ async function paginaVendedora(enlace) {
     const t = limpiarCodigo(filtro.value);
     const ps = d.paquetes.filter(p => !t || p.codigo.includes(t) || (p.codigo_anterior || "").includes(t) || (p.retiro || "") === t);
     const activos = ps.filter(p => p.retiro), cerrados = ps.filter(p => !p.retiro);
-    lista.replaceChildren(
+    pon(lista, 
       activos.length ? h("h2", {}, "Por recoger") : null, ...activos.map(tarjeta),
       cerrados.length ? h("h2", {}, "Entregados y devueltos (últimos 30 días)") : null, ...cerrados.map(tarjeta),
       ps.length ? null : h("p", { class: "suave" }, t ? "Ningún paquete con ese código." : "Todavía no tienes paquetes en Bunny Express."));
@@ -1108,7 +1108,7 @@ function paginaConsulta(inicial) {
     const c = soloDigitos(cod.value);
     if (c.length !== 6) throw new Error("El código de retiro tiene 6 números.");
     const ps = ok(await sb.rpc("consultar_retiro", { p_codigo: c }));
-    res.replaceChildren(...(ps.length ? ps.map(p => h("div", { class: "tarjeta" },
+    pon(res, ...(ps.length ? ps.map(p => h("div", { class: "tarjeta" },
       h("div", { class: "fila" }, h("span", { class: "cod crece" }, p.codigo), chipSituacion(p.situacion)),
       h("div", { class: "destino-grande", style: "background:" + p.color }, "→ " + p.destino),
       h("div", { style: "font-size:18px;font-weight:700" }, p.situacion.texto),
