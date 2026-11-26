@@ -45,6 +45,7 @@
   input[type=text], input[type=email], input[type=password], input[type=tel], input[type=number], input[type=date], select, textarea {
     width: 100%; padding: 12px; border: 1.5px solid var(--linea); border-radius: 10px; background: #fff; font-weight: 400; min-height: 48px; }
   input:focus, select:focus, textarea:focus, button:focus-visible { outline: 3px solid rgba(233,178,60,.6); outline-offset: 1px; border-color: var(--oro); }
+  input[type=date] { -webkit-appearance: none; appearance: none; min-width: 0; max-width: 100%; display: block; }
   input.codigo { font-size: 26px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; text-align: center; }
   .marca-check { display: flex; align-items: center; gap: 10px; font-weight: 500; font-size: 15px; min-height: 40px; }
   .marca-check input { width: 22px; height: 22px; accent-color: var(--acento); flex: none; }
@@ -448,7 +449,7 @@ async function abrirLote(id) {
   ir("recibir");
 }
 async function cargarPaquetesLote() {
-  E.lote.paquetes = ok(await sb.from("paquetes_detalle").select("id,codigo,codigo_retiro,destino_id,estado,num_fotos,creado_en,tamano,cobro")
+  E.lote.paquetes = ok(await sb.from("paquetes_detalle").select("id,codigo,codigo_retiro,destino_id,estado,num_fotos,creado_en,tamano,cobro,cliente_tel,cliente_nombre")
     .eq("lote_id", E.lote.id).order("creado_en"));
   if (!E.lote.ultimo && E.lote.paquetes.length) E.lote.ultimo = E.lote.paquetes[E.lote.paquetes.length - 1].codigo;
 }
@@ -468,6 +469,8 @@ async function vistaLote(m) {
   };
   codigo.addEventListener("input", pintarDestino); pintarDestino();
   const tam = segmentado("tamano", [["normal", "Normal"], ["grande", "Grande"]], "normal");
+  const celCliente = h("input", { type: "tel", id: "cliente-cel", inputMode: "numeric", autocomplete: "off", maxLength: 12, placeholder: "Ej. 72516737" });
+  const aliasCliente = h("input", { type: "text", id: "cliente-alias", autocomplete: "off", placeholder: "Ej. Tu osita, Pao" });
 
   const foto = h("input", { type: "file", id: "foto", accept: "image/*", capture: "environment", hidden: true });
   const previa = h("img", { class: "vista-previa", hidden: true, alt: "Foto del paquete" });
@@ -477,11 +480,14 @@ async function vistaLote(m) {
     const c = limpiarCodigo(codigo.value);
     if (!/^[A-Z]{1,3}[0-9]{1,6}$/.test(c)) throw new Error("Escribe el código: letras y luego números, por ejemplo Q0251.");
     if (!destinoDeCodigo(c) && !destinoSel.value) throw new Error("Elige el destino del paquete.");
+    const cel = soloDigitos(celCliente.value);
+    if (cel && !/^[67]\d{7}$/.test(cel)) throw new Error("El celular de la clienta debe tener 8 números y empezar con 6 o 7. Revísalo en el paquete o déjalo vacío.");
     return c;
   };
   const guardarPaquete = async archivo => {
     const c = validar();
-    const fila = { codigo: c, lote_id: L.id, vendedora_id: L.vendedora.id, ubicacion_id: E.lugarId, tamano: tam.valor() };
+    const fila = { codigo: c, lote_id: L.id, vendedora_id: L.vendedora.id, ubicacion_id: E.lugarId, tamano: tam.valor(),
+      cliente_tel: soloDigitos(celCliente.value) || null, cliente_nombre: aliasCliente.value.trim() || null };
     if (!destinoDeCodigo(c)) fila.destino_id = Number(destinoSel.value);
     botonFoto.disabled = guardar.disabled = true; botonFoto.textContent = "Guardando…";
     try {
@@ -515,6 +521,7 @@ async function vistaLote(m) {
       e.target.checked ? marcados.add(p.id) : marcados.delete(p.id); unir.hidden = marcados.size < 2; } });
     return h("label", { class: "fila" }, h("span", { class: "marca-check" }, chk),
       h("div", { class: "crece" }, h("span", { class: "cod" }, p.codigo), " ", chipLugar(p.destino_id),
+        (p.cliente_tel || p.cliente_nombre) ? h("div", {}, [p.cliente_nombre, p.cliente_tel].filter(Boolean).join(" · ")) : null,
         h("div", { class: "suave" }, "Retiro " + p.codigo_retiro + (p.tamano === "grande" ? " · Grande" : "") + " · " + bs(p.cobro.total) +
           (Number(p.cobro.falta) > 0 ? "" : " · pagado") + (p.num_fotos ? " · con foto" : " · sin foto"))));
   }));
@@ -526,6 +533,7 @@ async function vistaLote(m) {
     h("div", { class: "tarjeta" },
       h("label", { class: "campo" }, "Código de la etiqueta", codigo), destinoCaja,
       h("div", { class: "campo" }, "Tamaño", tam.nodo),
+      h("div", { class: "rejilla2" }, h("label", { class: "campo" }, "Celular de la clienta", celCliente), h("label", { class: "campo" }, "Alias (opcional)", aliasCliente)),
       foto, botonFoto, previa, guardar),
     L.paquetes.length ? h("div", { class: "tarjeta" },
       h("div", { class: "fila" }, h("h2", { class: "crece" }, "En este lote"), unir),
@@ -1287,7 +1295,20 @@ async function paginaVendedora(enlace) {
   const lista = h("div", { class: "pila", id: "portal-lista" });
   const cuenta = k => d.paquetes.filter(p => p.situacion.clave === k).length;
   const tarjeta = p => {
-    const msgClienta = `Hola, tu paquete ${p.codigo} ya está en Bunny Express (${p.destino}). Para recogerlo presenta tu código de retiro: ${p.retiro}. Mira si ya puedes recogerlo aquí: ${enlaceConsulta(p.retiro)}`;
+    const saludo = p.cliente_nombre ? `Hola ${p.cliente_nombre}` : "Hola";
+    const msgClienta = `${saludo}, tu paquete ${p.codigo} ya está en Bunny Express (${p.destino}). Para recogerlo presenta tu código de retiro: ${p.retiro}.` +
+      (Number(p.por_cobrar) > 0 ? ` Almacenaje a pagar: ${bs(p.por_cobrar)}.` : "") + ` Mira si ya puedes recogerlo aquí: ${enlaceConsulta(p.retiro)}`;
+    const tel = p.cliente_tel ? telWhatsapp(p.cliente_tel) : "";
+    const cel = h("input", { type: "tel", inputMode: "numeric", placeholder: "Celular", value: p.cliente_tel || "", "aria-label": "Celular de la clienta de " + p.codigo });
+    const ali = h("input", { type: "text", placeholder: "Alias", value: p.cliente_nombre || "", "aria-label": "Nombre de la clienta de " + p.codigo });
+    const guardar = h("button", { class: "btn sec chico", type: "button" }, "Guardar");
+    guardar.addEventListener("click", () => intentar(async () => {
+      const t = soloDigitos(cel.value);
+      if (t && !/^[67]\d{7}$/.test(t)) throw new Error("El celular debe tener 8 números y empezar con 6 o 7.");
+      const r = ok(await sb.rpc("guardar_clienta", { p_enlace: enlace, p_codigo: p.codigo, p_nombre: ali.value, p_celular: t }));
+      Object.assign(p, { cliente_nombre: r.cliente_nombre, cliente_tel: r.cliente_tel });
+      toast("Guardado", "bien"); pintar();
+    }, guardar));
     return h("div", { class: "tarjeta" },
       h("div", { class: "fila" }, h("span", { class: "cod crece" }, p.codigo), chipSituacion(p.situacion)),
       h("div", { class: "fila" }, h("span", { class: "chip" }, h("span", { class: "punto", style: "background:" + p.color }), "→ " + p.destino),
@@ -1298,8 +1319,10 @@ async function paginaVendedora(enlace) {
       p.fotos.length ? h("div", { class: "fotos" }, p.fotos.map(r => h("a", { href: urlFoto(r), target: "_blank", rel: "noopener" }, h("img", { src: urlFoto(r), alt: "Foto de " + p.codigo, loading: "lazy" })))) : null,
       p.retiro ? h("div", { class: "ok-caja fila", style: "justify-content:space-between" }, h("span", {}, "Código de retiro"), h("span", { class: "cod" }, p.retiro)) : null,
       p.retiro ? h("div", { class: "suave" }, Number(p.por_cobrar) > 0 ? "Almacenaje a pagar al recoger: " + bs(p.por_cobrar) : "Almacenaje pagado ✓") : null,
+      p.retiro ? h("div", { class: "campo" }, "Tu clienta", h("div", { class: "fila" }, h("span", { class: "crece" }, ali), h("span", { class: "crece" }, cel), guardar)) : null,
       p.retiro ? h("div", { class: "fila" },
-        h("a", { class: "btn verde chico crece", href: "https://wa.me/?text=" + encodeURIComponent(msgClienta), target: "_blank", rel: "noopener" }, "Enviar a mi clienta"),
+        h("a", { class: "btn verde chico crece", href: `https://wa.me/${tel}?text=` + encodeURIComponent(msgClienta), target: "_blank", rel: "noopener" },
+          tel ? "Enviar a " + (p.cliente_nombre || p.cliente_tel) : "Enviar a mi clienta"),
         h("button", { class: "btn sec chico", onclick: () => copiar(msgClienta, "Mensaje copiado") }, "Copiar")) : null);
   };
   const pintar = () => {
